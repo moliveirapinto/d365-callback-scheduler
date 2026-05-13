@@ -367,10 +367,14 @@ function buildActionRequest(p, contactId){
       boundParameter: null, operationType: 0,
       operationName: "CCaaS_CreateProactiveVoiceDelivery",
       parameterTypes: {
+        // The CCaaS action validates the body against a strongly-typed C# DTO
+        // that expects these as plain JSON strings -- declaring them as Edm.Guid
+        // here makes Xrm.WebApi serialize them in a shape the server model can't bind
+        // ("could not be converted to ... VoiceDeliveryRequest" at $.ProactiveEngagementConfigId).
         ApiVersion:                  { typeName: "Edm.String", structuralProperty: 1 },
-        ProactiveEngagementConfigId: { typeName: "Edm.Guid",   structuralProperty: 1 },
+        ProactiveEngagementConfigId: { typeName: "Edm.String", structuralProperty: 1 },
         DestinationPhoneNumber:      { typeName: "Edm.String", structuralProperty: 1 },
-        ContactId:                   { typeName: "Edm.Guid",   structuralProperty: 1 },
+        ContactId:                   { typeName: "Edm.String", structuralProperty: 1 },
         Windows:                     { typeName: "Edm.String", structuralProperty: 1 },
         InputAttributes:             { typeName: "Edm.String", structuralProperty: 1 }
       }

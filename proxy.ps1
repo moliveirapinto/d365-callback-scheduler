@@ -46,19 +46,39 @@ function Resolve-ContactId {
   $email = if ($Body.email)     { ([string]$Body.email).Trim().Replace("'", "''") }     else { "" }
   $phone = if ($Body.phoneE164) { ([string]$Body.phoneE164).Trim().Replace("'", "''") } else { "" }
 
+  # Pull every candidate that matches phone OR email, then rank locally so we
+  # link to the best fit (the destination phone is what the agent actually
+  # sees on the call popup, so phone match is the most important signal).
   $clauses = @()
   if ($email) { $clauses += "emailaddress1 eq '$email'" }
-  if ($phone) { $clauses += "mobilephone eq '$phone'" }
-  $filter = ($clauses -join " or ")
+  if ($phone) {
+    $clauses += "mobilephone eq '$phone'"
+    $clauses += "telephone1 eq '$phone'"
+  }
+  if ($clauses.Count -gt 0) {
+    $filter = ($clauses -join " or ")
+    $url = "$ApiBase/contacts?`$select=contactid,firstname,lastname,fullname,emailaddress1,mobilephone,telephone1,modifiedon&`$filter=$filter&`$top=25"
+    $resp = Invoke-RestMethod -Uri $url -Headers $Headers -Method Get
+    $cands = @($resp.value)
 
-  $url = "$ApiBase/contacts?`$select=contactid,firstname,lastname,emailaddress1,mobilephone&`$filter=$filter&`$top=1"
-  $resp = Invoke-RestMethod -Uri $url -Headers $Headers -Method Get
-  if ($resp.value.Count -gt 0) {
-    Write-Host ("  -> Found existing contact: {0} {1} ({2})" -f $resp.value[0].firstname, $resp.value[0].lastname, $resp.value[0].contactid) -ForegroundColor DarkGray
-    return $resp.value[0].contactid
+    if ($cands.Count -gt 0) {
+      $score = {
+        param($c)
+        $s = 0
+        $emailHit = $email -and ($c.emailaddress1 -and $c.emailaddress1.ToLower() -eq $email.ToLower())
+        $phoneHit = $phone -and (($c.mobilephone -eq $phone) -or ($c.telephone1 -eq $phone))
+        if ($emailHit -and $phoneHit) { $s += 100 }   # perfect match wins
+        elseif ($phoneHit)            { $s += 50 }    # phone alone beats email alone for voice callbacks
+        elseif ($emailHit)            { $s += 25 }
+        return $s
+      }
+      $best = $cands | Sort-Object -Property @{Expression = { & $score $_ }; Descending = $true}, modifiedon -Descending | Select-Object -First 1
+      Write-Host ("  -> Matched contact: {0} (mobile={1}, email={2}, id={3})" -f $best.fullname, $best.mobilephone, $best.emailaddress1, $best.contactid) -ForegroundColor DarkGray
+      return $best.contactid
+    }
   }
 
-  # Create
+  # No match — create
   $newContact = @{
     firstname     = $Body.firstName
     lastname      = $Body.lastName

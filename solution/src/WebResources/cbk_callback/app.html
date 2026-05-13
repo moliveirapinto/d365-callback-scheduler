@@ -119,11 +119,20 @@
   .pass dt{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700;margin-bottom:4px}
   .pass dd{margin:0;font-weight:600;font-size:15px;word-break:break-word}
   .pass .empty{color:rgba(255,255,255,.4);font-weight:400;font-style:italic;font-size:14px}
-  .success{text-align:center;padding:40px 20px 16px}
+  .success-stage{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:linear-gradient(180deg,#fff5e6 0%,#ffe9d6 60%,#ffd9c2 100%);overflow:auto;z-index:100}
+  .success{text-align:center;padding:48px 36px 36px;max-width:520px;width:100%;box-sizing:border-box;animation:popIn .45s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes popIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
   .success .check{width:78px;height:78px;border-radius:50%;background:linear-gradient(135deg,var(--good),#0d8a55);display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 18px 40px -16px rgba(13,138,85,.6)}
-  .success h2{font-family:var(--serif);font-weight:700;font-size:34px;margin:0 0 8px;letter-spacing:-.01em}
-  .success p{color:var(--muted);max-width:48ch;margin:0 auto;font-size:15px}
-  .success .recap{margin:24px auto 0;max-width:440px;text-align:left;background:#fff8f0;border:1px dashed rgba(11,16,32,.18);border-radius:14px;padding:16px 18px;font-size:14px}
+  .success h2{font-family:var(--serif);font-weight:700;font-size:36px;margin:0 0 8px;letter-spacing:-.01em}
+  .success .lede{color:var(--muted);margin:0 auto 26px;font-size:15px;max-width:38ch}
+  .success .summary{display:grid;grid-template-columns:1fr;gap:10px;margin:0 auto 22px;max-width:380px;text-align:left}
+  .success .row{display:flex;align-items:center;gap:14px;background:#fff8f0;border:1px solid rgba(11,16,32,.08);border-radius:14px;padding:14px 16px}
+  .success .row .ico{width:38px;height:38px;border-radius:10px;background:#fff;border:1px solid rgba(11,16,32,.08);display:grid;place-items:center;color:var(--accent);flex-shrink:0}
+  .success .row .ico svg{width:20px;height:20px}
+  .success .row .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:2px}
+  .success .row .val{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1.25}
+  .success .recap{margin:18px auto 0;max-width:380px;text-align:left;background:#fff8f0;border:1px dashed rgba(11,16,32,.18);border-radius:14px;padding:14px 16px;font-size:13.5px;color:var(--muted)}
+  .success .recap b{color:var(--ink)}
   footer.foot{margin-top:40px;color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between}
   .mobile-cta{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(255,245,230,0) 0%,rgba(255,245,230,.95) 50%);backdrop-filter:blur(8px)}
   .mobile-cta .btn{width:100%;justify-content:center}
@@ -139,7 +148,6 @@
   <header class="top">
     <div class="brand"><div class="dot" aria-hidden="true"></div><div id="brandName">Callback Scheduler</div></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="mode-banner" id="modeBanner" title="How this page is talking to D365"><span class="mdot"></span><span id="modeText">loading…</span></div>
       <div class="pill" title="Average wait if you call us right now"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
     </div>
   </header>
@@ -594,41 +602,45 @@ form.addEventListener("submit", async (e) => {
 });
 
 function showSuccess(p){
-  const body = document.querySelector(".grid");
+  const stage = document.createElement("div");
+  stage.className = "success-stage";
   const card = document.createElement("section");
   card.className = "card success";
+  const dateStr = dateLongFmt.format(state.date);
+  const timeStr = `${timeFmt.format(state.slot.start)} \u2013 ${timeFmt.format(state.slot.end)}`;
   card.innerHTML = `
     <div class="check"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
     <h2>You're booked.</h2>
-    <p>We'll call <b>${p.phoneE164}</b> on <b>${dateLongFmt.format(state.date)}</b> between <b>${timeFmt.format(state.slot.start)}</b> and <b>${timeFmt.format(state.slot.end)}</b>.</p>
+    <p class="lede">A specialist will call you within the window below. No further action needed.</p>
+    <div class="summary">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><div class="lbl">Calling</div><div class="val">${p.phoneE164}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="lbl">Date</div><div class="val">${dateStr}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="lbl">Window</div><div class="val">${timeStr}</div></div></div>
+    </div>
     <div class="recap"><b>What happens next:</b><ul style="margin:8px 0 0;padding-left:18px;line-height:1.6">
       <li>Our system will dial you within your chosen window.</li>
       <li>If we miss you, we'll try once more.</li>
     </ul></div>`;
-  body.innerHTML = ""; body.appendChild(card);
+  stage.appendChild(card);
+  document.body.appendChild(stage);
   document.querySelector(".mobile-cta").style.display = "none";
-  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 /* ============================================================================
    Bootstrap
    ============================================================================ */
 (async function init(){
-  const banner = $("modeBanner"), modeText = $("modeText"), footEnv = $("footEnv");
+  const footEnv = $("footEnv");
   try {
     if (MODE === "AGENT") {
-      modeText.textContent = "Agent mode";
       await loadConfigFromXrm();
       footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
     } else {
-      banner.classList.add("demo");
       loadConfigStandalone();
-      modeText.textContent = CONFIG.flowTriggerUrl ? "Customer mode" : "Demo mode (no backend)";
       footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "Set cbk_FlowTriggerUrl env var or ?api= URL parameter";
     }
   } catch(e){
     console.error("[cbk] init failed", e);
-    modeText.textContent = "Init error";
   }
   buildDays(); updatePass();
   tickLiveWait(); setInterval(tickLiveWait, 30000);

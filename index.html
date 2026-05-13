@@ -529,10 +529,11 @@
    You can also override at runtime via:  ?api=https://prod-XX.westus.logic.azure.com/...
    ========================================================================= */
 const CONFIG = {
-  // Replace with your Power Automate HTTP-trigger URL (or leave blank to run in DEMO mode):
-  apiUrl: "",
-  // Proactive Engagement Configuration Id from Power Apps > Tables > Proactive Engagement Configuration
-  proactiveEngagementConfigId: "",
+  // Local proxy script (proxy.ps1) that calls D365 CCaaS_CreateProactiveVoiceDelivery.
+  // Leave blank to fall back to DEMO mode (no backend call).
+  apiUrl: "http://localhost:7071/callback",
+  // Proactive Engagement Configuration "Outbound" in *Mauricio Oliveira - Master
+  proactiveEngagementConfigId: "df129bb8-ea61-f011-bec2-00224826cb8a",
   // Business hours, local time (24h)
   hourStart: 9,
   hourEnd: 18,        // last window starts at 17:00, ends 18:00

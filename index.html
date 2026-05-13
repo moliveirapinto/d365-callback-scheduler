@@ -611,7 +611,6 @@ function buildDays(){
   // Auto-select first day that actually has bookable windows
   if (firstAvailable) selectDay(firstAvailable.d, firstAvailable.el);
 }
-buildDays();
 
 function selectDay(d, el){
   state.date = startOfLocalDay(d);
@@ -707,6 +706,9 @@ function updatePass(){
   document.getElementById(id).addEventListener("input", updatePass);
   document.getElementById(id).addEventListener("change", updatePass);
 });
+
+// Initial render — must run AFTER slotsHost / updatePass are defined
+buildDays();
 
 /* =========================================================================
    Submit

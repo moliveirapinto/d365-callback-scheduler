@@ -151,6 +151,35 @@ while ($listener.IsListening) {
     $res.OutputStream.Write($b, 0, $b.Length); $res.Close(); continue
   }
 
+  # GET /metrics/wait  -> { ok, avgWaitSec, sampleSize, windowHours, asOf }
+  # Averages msdyn_conversationfirstwaittimeinseconds across recent live work items.
+  if ($req.HttpMethod -eq "GET" -and $req.Url.AbsolutePath -eq "/metrics/wait") {
+    try {
+      $windowHours = 24
+      $sinceUtc    = (Get-Date).ToUniversalTime().AddHours(-$windowHours).ToString("yyyy-MM-ddTHH:mm:ssZ")
+      $headers     = New-Headers
+      $u = "$ApiBase/msdyn_ocliveworkitems?`$select=msdyn_conversationfirstwaittimeinseconds,createdon&`$filter=createdon ge $sinceUtc and msdyn_conversationfirstwaittimeinseconds ne null&`$top=200"
+      $r = Invoke-RestMethod -Uri $u -Headers $headers -Method Get
+      $vals = @($r.value | ForEach-Object { [int]$_.msdyn_conversationfirstwaittimeinseconds } | Where-Object { $_ -ge 0 })
+      $avg  = if ($vals.Count -gt 0) { [math]::Round(($vals | Measure-Object -Average).Average, 1) } else { $null }
+      $out  = @{
+        ok          = $true
+        avgWaitSec  = $avg
+        sampleSize  = $vals.Count
+        windowHours = $windowHours
+        asOf        = (Get-Date).ToUniversalTime().ToString("o")
+      } | ConvertTo-Json -Depth 5
+      $b = [Text.Encoding]::UTF8.GetBytes($out)
+      $res.ContentType = "application/json"; $res.StatusCode = 200
+      $res.OutputStream.Write($b, 0, $b.Length); $res.Close(); continue
+    } catch {
+      $err = @{ ok=$false; error=$_.Exception.Message } | ConvertTo-Json
+      $b = [Text.Encoding]::UTF8.GetBytes($err)
+      $res.ContentType = "application/json"; $res.StatusCode = 500
+      $res.OutputStream.Write($b, 0, $b.Length); $res.Close(); continue
+    }
+  }
+
   if (-not ($req.HttpMethod -eq "POST" -and $req.Url.AbsolutePath -eq "/callback")) {
     $res.StatusCode = 404; $res.Close(); continue
   }

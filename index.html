@@ -561,10 +561,32 @@ document.getElementById("tzHint").textContent = tz;
 document.getElementById("passTz").textContent = tz;
 document.getElementById("year").textContent = new Date().getFullYear();
 
-/* Live wait pseudo-randomized — replace with a real metric if you have one */
+/* Live wait — pulled from D365 (last 24h avg first-wait time on voice work items).
+   Falls back to a friendly placeholder if the proxy/metric is unavailable. */
 (function liveWait(){
-  const mins = 4 + Math.floor(Math.random()*12);
-  document.getElementById("liveWait").textContent = mins + " min";
+  const el = document.getElementById("liveWait");
+  if (!el) return;
+  const url = (CONFIG.apiUrl || "").replace(/\/callback\/?$/, "") + "/metrics/wait";
+  const fmt = (sec) => {
+    if (sec == null || isNaN(sec)) return "—";
+    if (sec < 60) return Math.round(sec) + " sec";
+    const m = sec / 60;
+    return (m < 10 ? m.toFixed(1) : Math.round(m)) + " min";
+  };
+  async function tick(){
+    try {
+      const r = await fetch(url, {cache:"no-store"});
+      if (!r.ok) throw 0;
+      const j = await r.json();
+      el.textContent = j.sampleSize > 0 ? fmt(j.avgWaitSec) : "no recent calls";
+      el.title = `D365 live: avg of ${j.sampleSize} call(s) in last ${j.windowHours}h`;
+    } catch {
+      el.textContent = "—";
+      el.title = "Live metric unavailable";
+    }
+  }
+  tick();
+  setInterval(tick, 30000);
 })();
 
 /* =========================================================================

@@ -43,21 +43,23 @@ function New-Headers {
 function Resolve-ContactId {
   param([Parameter(Mandatory)]$Body, [Parameter(Mandatory)]$Headers)
 
-  $email = if ($Body.email)     { ([string]$Body.email).Trim().Replace("'", "''") }     else { "" }
-  $phone = if ($Body.phoneE164) { ([string]$Body.phoneE164).Trim().Replace("'", "''") } else { "" }
+  $email = if ($Body.email)     { ([string]$Body.email).Trim() }     else { "" }
+  $phone = if ($Body.phoneE164) { ([string]$Body.phoneE164).Trim() } else { "" }
 
-  # Pull every candidate that matches phone OR email, then rank locally so we
-  # link to the best fit (the destination phone is what the agent actually
-  # sees on the call popup, so phone match is the most important signal).
+  # Build OData filter. Values are wrapped in single quotes (escape any '),
+  # then the WHOLE filter string is URI-escaped so characters like '+' in
+  # E.164 phone numbers are not silently turned into spaces by URL parsing.
   $clauses = @()
-  if ($email) { $clauses += "emailaddress1 eq '$email'" }
+  if ($email) { $clauses += "emailaddress1 eq '$($email.Replace("'","''"))'" }
   if ($phone) {
-    $clauses += "mobilephone eq '$phone'"
-    $clauses += "telephone1 eq '$phone'"
+    $pq = $phone.Replace("'","''")
+    $clauses += "mobilephone eq '$pq'"
+    $clauses += "telephone1 eq '$pq'"
   }
   if ($clauses.Count -gt 0) {
     $filter = ($clauses -join " or ")
-    $url = "$ApiBase/contacts?`$select=contactid,firstname,lastname,fullname,emailaddress1,mobilephone,telephone1,modifiedon&`$filter=$filter&`$top=25"
+    $select = "contactid,firstname,lastname,fullname,emailaddress1,mobilephone,telephone1,modifiedon"
+    $url = "$ApiBase/contacts?`$select=$select&`$filter=$([Uri]::EscapeDataString($filter))&`$top=25"
     $resp = Invoke-RestMethod -Uri $url -Headers $Headers -Method Get
     $cands = @($resp.value)
 
@@ -73,7 +75,7 @@ function Resolve-ContactId {
         return $s
       }
       $best = $cands | Sort-Object -Property @{Expression = { & $score $_ }; Descending = $true}, modifiedon -Descending | Select-Object -First 1
-      Write-Host ("  -> Matched contact: {0} (mobile={1}, email={2}, id={3})" -f $best.fullname, $best.mobilephone, $best.emailaddress1, $best.contactid) -ForegroundColor DarkGray
+      Write-Host ("  -> Matched contact: {0} (mobile={1}, email={2}, score={3}, id={4})" -f $best.fullname, $best.mobilephone, $best.emailaddress1, (& $score $best), $best.contactid) -ForegroundColor DarkGray
       return $best.contactid
     }
   }

@@ -110,11 +110,12 @@ function Start-CustomerBindJob {
     [Parameter(Mandatory)][string]$DeliveryId,
     [Parameter(Mandatory)][string]$ContactId,
     [Parameter(Mandatory)][string]$DestinationPhone,
-    [Parameter(Mandatory)][datetime]$SubmittedUtc
+    [Parameter(Mandatory)][datetime]$SubmittedUtc,
+    [Parameter(Mandatory)][datetime]$WindowEndUtc
   )
 
-  Start-Job -Name "bind-$DeliveryId" -ArgumentList $DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $OrgUrl, $ApiBase -ScriptBlock {
-    param($DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $OrgUrl, $ApiBase)
+  Start-Job -Name "bind-$DeliveryId" -ArgumentList $DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $WindowEndUtc, $OrgUrl, $ApiBase -ScriptBlock {
+    param($DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $WindowEndUtc, $OrgUrl, $ApiBase)
 
     $log = Join-Path $env:TEMP "d365-bind-$DeliveryId.log"
     function W($m) { "$([DateTime]::UtcNow.ToString('o')) $m" | Out-File -FilePath $log -Append -Encoding utf8 }
@@ -131,41 +132,45 @@ function Start-CustomerBindJob {
         "If-Match"         = "*"
       }
       $sinceFilter = $SubmittedUtc.AddMinutes(-1).ToString("yyyy-MM-ddTHH:mm:ssZ")
-      $deadline    = (Get-Date).AddMinutes(15)
+      # Stay alive past the window end so retries / late-fired calls inside
+      # the window also get patched. Cap at 30 min as a hard ceiling.
+      $deadline = $WindowEndUtc.AddMinutes(2)
+      if ($deadline -gt (Get-Date).ToUniversalTime().AddMinutes(30)) {
+        $deadline = (Get-Date).ToUniversalTime().AddMinutes(30)
+      }
+      $patched = @{}  # convoId -> $true, so we don't re-PATCH
 
-      W "START delivery=$DeliveryId contact=$ContactId phone=$DestinationPhone since=$sinceFilter"
+      W "START delivery=$DeliveryId contact=$ContactId phone=$DestinationPhone since=$sinceFilter deadline=$($deadline.ToString('o'))"
 
-      while ((Get-Date) -lt $deadline) {
-        $convoId = $null
-
-        # Primary: find conversation by destination phone, created after submit
+      while ((Get-Date).ToUniversalTime() -lt $deadline) {
         try {
-          $phoneEnc = [Uri]::EscapeDataString("msdyn_title eq '$($DestinationPhone): Proactive Outbound' and createdon ge $sinceFilter")
-          $u = "$ApiBase/msdyn_ocliveworkitems?`$select=msdyn_ocliveworkitemid,_msdyn_customer_value,createdon&`$filter=$phoneEnc&`$orderby=createdon desc&`$top=5"
+          $filter = "msdyn_title eq '$($DestinationPhone): Proactive Outbound' and createdon ge $sinceFilter"
+          $u = "$ApiBase/msdyn_ocliveworkitems?`$select=msdyn_ocliveworkitemid,_msdyn_customer_value,createdon&`$filter=$([Uri]::EscapeDataString($filter))&`$orderby=createdon desc&`$top=20"
           $r = Invoke-RestMethod -Uri $u -Headers $h -Method Get
-          $cands = @($r.value)
-          if ($cands.Count -gt 0) {
-            $target = $cands | Where-Object { -not $_._msdyn_customer_value } | Select-Object -First 1
-            if (-not $target) { $target = $cands[0] }
-            $convoId = $target.msdyn_ocliveworkitemid
-            W "  found conversation $convoId (customerSet=$([bool]$target._msdyn_customer_value))"
+          foreach ($c in @($r.value)) {
+            $cid = $c.msdyn_ocliveworkitemid
+            if ($patched.ContainsKey($cid)) { continue }
+            if ($c._msdyn_customer_value) {
+              # Already bound (either by us in a prior iteration, by another
+              # bind job for a sibling delivery, or by the engagement service)
+              $patched[$cid] = $true
+              continue
+            }
+            try {
+              $body = @{ 'msdyn_customer_msdyn_ocliveworkitem_contact@odata.bind' = "/contacts($ContactId)" } | ConvertTo-Json
+              Invoke-RestMethod -Uri "$ApiBase/msdyn_ocliveworkitems($cid)" -Method Patch -Headers $h -Body $body | Out-Null
+              $patched[$cid] = $true
+              W "  PATCHed conversation $cid (created $($c.createdon))"
+            } catch {
+              W "  PATCH error on ${cid}: $($_.Exception.Message)"
+            }
           }
-        } catch { W "  poll error: $($_.Exception.Message)" }
-
-        if ($convoId) {
-          try {
-            $body = @{ 'msdyn_customer_msdyn_ocliveworkitem_contact@odata.bind' = "/contacts($ContactId)" } | ConvertTo-Json
-            Invoke-RestMethod -Uri "$ApiBase/msdyn_ocliveworkitems($convoId)" -Method Patch -Headers $h -Body $body | Out-Null
-            W "DONE PATCHed customer onto conversation $convoId"
-            return
-          } catch {
-            W "  PATCH error: $($_.Exception.Message)"
-          }
+        } catch {
+          W "  poll error: $($_.Exception.Message)"
         }
-
         Start-Sleep -Seconds 8
       }
-      W "TIMEOUT - no conversation found within 15 min"
+      W "DONE patched $($patched.Count) conversation(s); window closed"
     } catch {
       W "FATAL: $($_.Exception.Message)"
     }
@@ -212,6 +217,13 @@ function Invoke-ProactiveDelivery {
 # -----------------------------------------------------------------------------
 #  HTTP listener
 # -----------------------------------------------------------------------------
+# Idempotency cache: prevents the same phone+window from being submitted twice
+# within $DedupWindowSec seconds. Guards against accidental browser double-
+# submits (double-click, page refresh during fetch, etc.) which would result
+# in two simultaneous outbound call attempts to the same person.
+$RecentSubmits   = @{}
+$DedupWindowSec  = 60
+
 $listener = [System.Net.HttpListener]::new()
 $prefix = "http://localhost:$Port/"
 $listener.Prefixes.Add($prefix)
@@ -294,16 +306,45 @@ while ($listener.IsListening) {
     if (-not $body.phoneE164) { throw "phoneE164 is required." }
     if (-not $body.ccaas.Windows -or $body.ccaas.Windows.Count -lt 1) { throw "At least one Window is required." }
 
+    # Idempotency: drop duplicate submissions for the same phone+window that
+    # arrive within $DedupWindowSec. Browsers occasionally fire the form's
+    # submit event twice (rapid clicks, mobile button + form, etc.) and we
+    # do NOT want to launch a second outbound call for the same booking.
+    $w0 = [string]$body.ccaas.Windows[0].Start
+    $w1 = [string]$body.ccaas.Windows[0].End
+    $dedupKey = "$($body.phoneE164)|$w0|$w1"
+    $nowUtc = [DateTime]::UtcNow
+    # Evict stale entries
+    foreach ($k in @($RecentSubmits.Keys)) {
+      if (($nowUtc - $RecentSubmits[$k].At).TotalSeconds -gt $DedupWindowSec) {
+        $RecentSubmits.Remove($k) | Out-Null
+      }
+    }
+    if ($RecentSubmits.ContainsKey($dedupKey)) {
+      $prev = $RecentSubmits[$dedupKey]
+      Write-Host "  -> DUPLICATE submit suppressed (key=$dedupKey, original at $($prev.At.ToString('HH:mm:ss'))Z DeliveryId=$($prev.DeliveryId))" -ForegroundColor DarkYellow
+      $out = @{ ok = $true; DeliveryId = $prev.DeliveryId; ContactId = $prev.ContactId; deduped = $true } | ConvertTo-Json -Depth 5
+      $res.ContentType = "application/json"; $res.StatusCode = 200
+      $b = [Text.Encoding]::UTF8.GetBytes($out)
+      $res.OutputStream.Write($b, 0, $b.Length); $res.Close(); continue
+    }
+
     $headers   = New-Headers
     $contactId = Resolve-ContactId -Body $body -Headers $headers
     $result    = Invoke-ProactiveDelivery -Body $body -ContactId $contactId -Headers $headers
 
+    # Cache this submit so an immediate retry from the browser is suppressed.
+    $RecentSubmits[$dedupKey] = @{ At = $nowUtc; DeliveryId = $result.DeliveryId; ContactId = $contactId }
+
     # Engagement service won't bind the Customer lookup on the resulting
     # conversation unless the call connects with an unambiguous caller-ID
     # match. Spawn a background poller that PATCHes it for us so the agent
-    # always sees the right contact, even on failed/dropped calls.
+    # always sees the right contact, even on failed/dropped calls. Pass the
+    # window end so the poller stays alive for the full duration in case the
+    # engagement service initiates retries within the window.
     if ($result.DeliveryId -and $contactId) {
-      Start-CustomerBindJob -DeliveryId $result.DeliveryId -ContactId $contactId -DestinationPhone $body.phoneE164 -SubmittedUtc ([DateTime]::UtcNow)
+      $windowEndUtc = [DateTime]::Parse($w1, $null, [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+      Start-CustomerBindJob -DeliveryId $result.DeliveryId -ContactId $contactId -DestinationPhone $body.phoneE164 -SubmittedUtc $nowUtc -WindowEndUtc $windowEndUtc
       # Reap completed jobs so they don't accumulate in the runspace
       Get-Job | Where-Object { $_.State -in 'Completed','Failed','Stopped' } | Remove-Job -Force -ErrorAction SilentlyContinue
     }

@@ -539,7 +539,7 @@ const CONFIG = {
   hourEnd: 18,        // last window starts at 17:30, ends 18:00
   slotMinutes: 30,    // length of each callback window
   daysAhead: 14,
-  minLeadMinutes: 30, // earliest slot must be at least this far in the future
+  minLeadMinutes: 0,  // 0 = any slot whose end is still in the future is bookable
 };
 
 // URL overrides (handy for staging)
@@ -584,7 +584,8 @@ function dayHasAvailableSlot(d){
   const dayStart = new Date(d); dayStart.setHours(CONFIG.hourStart,0,0,0);
   const dayEnd   = new Date(d); dayEnd.setHours(CONFIG.hourEnd,0,0,0);
   for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += stepMs){
-    if (new Date(t) >= minTime) return true;
+    const end = new Date(t + stepMs);
+    if (end > minTime) return true;
   }
   return false;
 }
@@ -663,7 +664,7 @@ function buildSlots(){
       btn.type = "button";
       btn.className = "slot";
       btn.innerHTML = `${timeFmt.format(start)}<small>to ${timeFmt.format(end)}</small>`;
-      if (start < minTime){ btn.disabled = true; }
+      if (end <= minTime){ btn.disabled = true; }
       else {
         any = true;
         btn.addEventListener("click", () => {

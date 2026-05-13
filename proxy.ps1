@@ -96,6 +96,82 @@ function Resolve-ContactId {
   return $contactId
 }
 
+# Background job that waits for the engagement service to materialize a
+# conversation (msdyn_ocliveworkitem) for the given delivery, then PATCHes the
+# Customer lookup so the agent UI shows the right contact even when the call
+# never connects (Teams Phone PSTN failure, voicemail, etc.).
+#
+# The proactive engagement service writes the contact_id we passed onto the
+# msdyn_proactive_delivery row but does NOT propagate it to the conversation's
+# customer lookup unless the call connects and the inbound caller-ID lookup
+# finds an unambiguous match. This job closes that gap.
+function Start-CustomerBindJob {
+  param(
+    [Parameter(Mandatory)][string]$DeliveryId,
+    [Parameter(Mandatory)][string]$ContactId,
+    [Parameter(Mandatory)][string]$DestinationPhone,
+    [Parameter(Mandatory)][datetime]$SubmittedUtc
+  )
+
+  Start-Job -Name "bind-$DeliveryId" -ArgumentList $DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $OrgUrl, $ApiBase -ScriptBlock {
+    param($DeliveryId, $ContactId, $DestinationPhone, $SubmittedUtc, $OrgUrl, $ApiBase)
+
+    $log = Join-Path $env:TEMP "d365-bind-$DeliveryId.log"
+    function W($m) { "$([DateTime]::UtcNow.ToString('o')) $m" | Out-File -FilePath $log -Append -Encoding utf8 }
+
+    try {
+      $tok = az account get-access-token --resource $OrgUrl --query accessToken -o tsv 2>$null
+      if (-not $tok) { W "ERR: no token"; return }
+      $h = @{
+        Authorization      = "Bearer $tok"
+        Accept             = "application/json"
+        "OData-MaxVersion" = "4.0"
+        "OData-Version"    = "4.0"
+        "Content-Type"     = "application/json; charset=utf-8"
+        "If-Match"         = "*"
+      }
+      $sinceFilter = $SubmittedUtc.AddMinutes(-1).ToString("yyyy-MM-ddTHH:mm:ssZ")
+      $deadline    = (Get-Date).AddMinutes(15)
+
+      W "START delivery=$DeliveryId contact=$ContactId phone=$DestinationPhone since=$sinceFilter"
+
+      while ((Get-Date) -lt $deadline) {
+        $convoId = $null
+
+        # Primary: find conversation by destination phone, created after submit
+        try {
+          $phoneEnc = [Uri]::EscapeDataString("msdyn_title eq '$($DestinationPhone): Proactive Outbound' and createdon ge $sinceFilter")
+          $u = "$ApiBase/msdyn_ocliveworkitems?`$select=msdyn_ocliveworkitemid,_msdyn_customer_value,createdon&`$filter=$phoneEnc&`$orderby=createdon desc&`$top=5"
+          $r = Invoke-RestMethod -Uri $u -Headers $h -Method Get
+          $cands = @($r.value)
+          if ($cands.Count -gt 0) {
+            $target = $cands | Where-Object { -not $_._msdyn_customer_value } | Select-Object -First 1
+            if (-not $target) { $target = $cands[0] }
+            $convoId = $target.msdyn_ocliveworkitemid
+            W "  found conversation $convoId (customerSet=$([bool]$target._msdyn_customer_value))"
+          }
+        } catch { W "  poll error: $($_.Exception.Message)" }
+
+        if ($convoId) {
+          try {
+            $body = @{ 'msdyn_customer_msdyn_ocliveworkitem_contact@odata.bind' = "/contacts($ContactId)" } | ConvertTo-Json
+            Invoke-RestMethod -Uri "$ApiBase/msdyn_ocliveworkitems($convoId)" -Method Patch -Headers $h -Body $body | Out-Null
+            W "DONE PATCHed customer onto conversation $convoId"
+            return
+          } catch {
+            W "  PATCH error: $($_.Exception.Message)"
+          }
+        }
+
+        Start-Sleep -Seconds 8
+      }
+      W "TIMEOUT - no conversation found within 15 min"
+    } catch {
+      W "FATAL: $($_.Exception.Message)"
+    }
+  } | Out-Null
+}
+
 function Invoke-ProactiveDelivery {
   param([Parameter(Mandatory)]$Body, [Parameter(Mandatory)]$ContactId, [Parameter(Mandatory)]$Headers)
 
@@ -221,6 +297,16 @@ while ($listener.IsListening) {
     $headers   = New-Headers
     $contactId = Resolve-ContactId -Body $body -Headers $headers
     $result    = Invoke-ProactiveDelivery -Body $body -ContactId $contactId -Headers $headers
+
+    # Engagement service won't bind the Customer lookup on the resulting
+    # conversation unless the call connects with an unambiguous caller-ID
+    # match. Spawn a background poller that PATCHes it for us so the agent
+    # always sees the right contact, even on failed/dropped calls.
+    if ($result.DeliveryId -and $contactId) {
+      Start-CustomerBindJob -DeliveryId $result.DeliveryId -ContactId $contactId -DestinationPhone $body.phoneE164 -SubmittedUtc ([DateTime]::UtcNow)
+      # Reap completed jobs so they don't accumulate in the runspace
+      Get-Job | Where-Object { $_.State -in 'Completed','Failed','Stopped' } | Remove-Job -Force -ErrorAction SilentlyContinue
+    }
 
     $out = @{
       ok         = $true

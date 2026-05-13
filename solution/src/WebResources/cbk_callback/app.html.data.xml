@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WebResource>
+  <WebResourceId>{ff8224c6-123f-4316-9bb3-0b00bd38c496}</WebResourceId>
+  <WebResourceIdUnique>{3f789bd4-4108-4cd0-9d2f-d6268c823c6b}</WebResourceIdUnique>
+  <Name>cbk_callback/app.html</Name>
+  <DisplayName>Callback Scheduler — App</DisplayName>
+  <Description>Customer-facing callback scheduling page. Runs as a Dataverse web resource (agent mode) or standalone with a Power Automate flow URL (customer mode).</Description>
+  <LangaugeCode>0</LangaugeCode>
+  <CanBeDeleted>1</CanBeDeleted>
+  <CanBeDeletedByAdvancedFind>1</CanBeDeletedByAdvancedFind>
+  <IsCustomizable>1</IsCustomizable>
+  <IsHidden>0</IsHidden>
+  <IsAvailableForMobileOffline>0</IsAvailableForMobileOffline>
+  <IsEnabledForMobileClient>1</IsEnabledForMobileClient>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <WebResourceType>1</WebResourceType>
+  <SilverlightVersion />
+  <Version />
+  <FileName>/cbk_callback/app.html</FileName>
+</WebResource>

@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  Callback Scheduler — Setup
+  One-page admin helper. Run inside D365 (model-driven app).
+  - Lists all msdyn_proactive_engagement_config rows in this org
+  - Lets the admin pick one and writes it to the cbk_ProactiveEngagementConfigId env var
+  - Shows current values of every cbk_* env var
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Callback Scheduler — Setup</title>
+<style>
+  body{font-family:Segoe UI,system-ui,sans-serif;max-width:760px;margin:24px auto;padding:0 20px;color:#0b1020}
+  h1{font-size:22px;margin:0 0 4px}
+  p.lede{color:#5b6075;margin:0 0 24px}
+  .card{background:#fff;border:1px solid rgba(11,16,32,.12);border-radius:12px;padding:20px;margin:14px 0;box-shadow:0 4px 14px -10px rgba(0,0,0,.2)}
+  .card h2{margin:0 0 12px;font-size:16px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top}
+  th{font-weight:600;color:#5b6075;background:#fafafa;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+  .ok{color:#0d8a55;font-weight:600}
+  .warn{color:#c43054;font-weight:600}
+  select,button,input{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid #ccc}
+  button{background:#0b1020;color:#fff;border:0;padding:9px 16px;cursor:pointer;font-weight:600}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  code{background:#f4f4f4;padding:2px 6px;border-radius:4px;font-size:12px}
+  .err{color:#c43054;margin-top:8px;font-size:13px;font-weight:600;min-height:18px}
+  .small{font-size:12px;color:#5b6075}
+  a{color:#0b1020}
+</style>
+</head>
+<body>
+<h1>Callback Scheduler — Setup</h1>
+<p class="lede">Configure this solution for the current environment. Nothing here is hardcoded — every value lives in a Dataverse environment variable inside the <b>Callback Scheduler</b> solution.</p>
+
+<div class="card">
+  <h2>1. Pick the Proactive Engagement Configuration</h2>
+  <p class="small">The CCaaS_CreateProactiveVoiceDelivery action requires a Proactive Engagement Configuration GUID. Pick one below and click Save.</p>
+  <div class="row">
+    <select id="cfgSelect" style="min-width:340px"><option value="">— loading —</option></select>
+    <button id="saveCfg">Save</button>
+    <span id="saveStatus" class="small"></span>
+  </div>
+  <div class="err" id="cfgErr"></div>
+</div>
+
+<div class="card">
+  <h2>2. Current environment variable values</h2>
+  <table id="envTable">
+    <thead><tr><th>Schema name</th><th>Default</th><th>Current value</th></tr></thead>
+    <tbody><tr><td colspan="3" class="small">Loading…</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>3. Open the scheduler page</h2>
+  <p class="small">Once configured, embed the page anywhere in your model-driven app. URL pattern:</p>
+  <p><code id="appUrl">…</code></p>
+</div>
+
+<script>
+"use strict";
+function getXrm(){ try { return (window.parent && window.parent.Xrm) ? window.parent.Xrm : window.Xrm; } catch(e){ return null; } }
+const XRM = getXrm();
+const $ = id => document.getElementById(id);
+
+if (!XRM) {
+  document.body.innerHTML = '<h1>Open from inside D365</h1><p>This setup page only works when loaded as a Dataverse web resource inside a model-driven app.</p>';
+} else {
+  init();
+}
+
+async function init(){
+  const ctx = XRM.Utility.getGlobalContext();
+  const orgUrl = ctx.getClientUrl();
+  $("appUrl").textContent = `${orgUrl}/main.aspx?pagetype=webresource&webresourceName=cbk_callback/app.html`;
+
+  // 1. Load proactive engagement configs
+  try {
+    const cfgs = await XRM.WebApi.retrieveMultipleRecords(
+      "msdyn_proactive_engagement_config",
+      "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc"
+    );
+    const sel = $("cfgSelect"); sel.innerHTML = "";
+    if (!cfgs.entities.length) sel.innerHTML = '<option value="">(none found — create one in Customer Service admin center)</option>';
+    else {
+      sel.innerHTML = '<option value="">— pick one —</option>';
+      for (const c of cfgs.entities) {
+        const o = document.createElement("option");
+        o.value = c.msdyn_proactive_engagement_configid;
+        o.textContent = `${c.msdyn_name || "(no name)"} — ${c.msdyn_proactive_engagement_configid}`;
+        sel.appendChild(o);
+      }
+    }
+  } catch(e){ $("cfgErr").textContent = "Could not list proactive engagement configs: " + (e.message||e); }
+
+  // 2. Load env var snapshot
+  await refreshEnvTable();
+}
+
+async function refreshEnvTable(){
+  const r = await XRM.WebApi.retrieveMultipleRecords(
+    "environmentvariabledefinition",
+    "?$select=environmentvariabledefinitionid,schemaname,defaultvalue,type" +
+    "&$filter=startswith(schemaname,'cbk_')" +
+    "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid,value)" +
+    "&$orderby=schemaname asc"
+  );
+  const tbody = $("envTable").querySelector("tbody");
+  tbody.innerHTML = "";
+  for (const d of r.entities) {
+    const v = d["environmentvariabledefinition_environmentvariablevalue"];
+    const cur = (v && v.length) ? v[0].value : "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><code>${d.schemaname}</code></td>
+      <td>${escapeHtml(d.defaultvalue||"")}</td>
+      <td>${cur ? '<span class="ok">'+escapeHtml(cur)+'</span>' : '<span class="warn">(unset — using default)</span>'}</td>`;
+    tbody.appendChild(tr);
+  }
+  if (!r.entities.length) tbody.innerHTML = '<tr><td colspan="3" class="warn">No cbk_ environment variables found. Did the solution import successfully?</td></tr>';
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+$("saveCfg").addEventListener("click", async () => {
+  const v = $("cfgSelect").value;
+  $("cfgErr").textContent = "";
+  if (!v) { $("cfgErr").textContent = "Pick a config first."; return; }
+  $("saveCfg").disabled = true; $("saveStatus").textContent = "Saving…";
+  try {
+    await setEnvVar("cbk_ProactiveEngagementConfigId", v);
+    $("saveStatus").textContent = "Saved. Re-open the scheduler page to pick it up.";
+    await refreshEnvTable();
+  } catch(e){
+    $("cfgErr").textContent = "Save failed: " + (e.message||e);
+    $("saveStatus").textContent = "";
+  } finally { $("saveCfg").disabled = false; }
+});
+
+async function setEnvVar(schemaname, value){
+  // Find definition + existing value
+  const def = await XRM.WebApi.retrieveMultipleRecords(
+    "environmentvariabledefinition",
+    `?$select=environmentvariabledefinitionid&$filter=schemaname eq '${schemaname}'` +
+    `&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)`
+  );
+  if (!def.entities.length) throw new Error(`Env var ${schemaname} not found`);
+  const d = def.entities[0];
+  const existing = d.environmentvariabledefinition_environmentvariablevalue;
+  if (existing && existing.length) {
+    await XRM.WebApi.updateRecord("environmentvariablevalue", existing[0].environmentvariablevalueid, { value: String(value) });
+  } else {
+    await XRM.WebApi.createRecord("environmentvariablevalue", {
+      "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+      value: String(value), schemaname: schemaname + "_value"
+    });
+  }
+}
+</script>
+</body>
+</html>

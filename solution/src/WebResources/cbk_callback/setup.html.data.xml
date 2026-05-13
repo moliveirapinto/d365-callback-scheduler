@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WebResource>
+  <WebResourceId>{17249944-8548-4954-a555-9f186beda9d4}</WebResourceId>
+  <WebResourceIdUnique>{9eab3925-307d-47d9-98d6-cfbcd05f2157}</WebResourceIdUnique>
+  <Name>cbk_callback/setup.html</Name>
+  <DisplayName>Callback Scheduler — Setup</DisplayName>
+  <Description>Admin page to discover and configure the cbk_ environment variables for this environment.</Description>
+  <LangaugeCode>0</LangaugeCode>
+  <CanBeDeleted>1</CanBeDeleted>
+  <CanBeDeletedByAdvancedFind>1</CanBeDeletedByAdvancedFind>
+  <IsCustomizable>1</IsCustomizable>
+  <IsHidden>0</IsHidden>
+  <IsAvailableForMobileOffline>0</IsAvailableForMobileOffline>
+  <IsEnabledForMobileClient>0</IsEnabledForMobileClient>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <WebResourceType>1</WebResourceType>
+  <SilverlightVersion />
+  <Version />
+  <FileName>/cbk_callback/setup.html</FileName>
+</WebResource>

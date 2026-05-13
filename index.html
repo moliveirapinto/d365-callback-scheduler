@@ -536,7 +536,8 @@ const CONFIG = {
   proactiveEngagementConfigId: "df129bb8-ea61-f011-bec2-00224826cb8a",
   // Business hours, local time (24h)
   hourStart: 9,
-  hourEnd: 18,        // last window starts at 17:00, ends 18:00
+  hourEnd: 18,        // last window starts at 17:30, ends 18:00
+  slotMinutes: 30,    // length of each callback window
   daysAhead: 14,
   minLeadMinutes: 30, // earliest slot must be at least this far in the future
 };
@@ -579,9 +580,11 @@ function startOfLocalDay(d){
 
 function dayHasAvailableSlot(d){
   const minTime = new Date(Date.now() + CONFIG.minLeadMinutes*60000);
-  for (let h = CONFIG.hourStart; h < CONFIG.hourEnd; h++){
-    const start = new Date(d); start.setHours(h,0,0,0);
-    if (start >= minTime) return true;
+  const stepMs = CONFIG.slotMinutes*60000;
+  const dayStart = new Date(d); dayStart.setHours(CONFIG.hourStart,0,0,0);
+  const dayEnd   = new Date(d); dayEnd.setHours(CONFIG.hourEnd,0,0,0);
+  for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += stepMs){
+    if (new Date(t) >= minTime) return true;
   }
   return false;
 }
@@ -623,7 +626,7 @@ function selectDay(d, el){
 }
 
 /* =========================================================================
-   Time slots (1-hour windows)
+   Time slots (30-minute windows)
    ========================================================================= */
 const slotsHost = document.getElementById("slotsHost");
 const timeFmt = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
@@ -632,6 +635,7 @@ function buildSlots(){
   slotsHost.innerHTML = "";
   const now = new Date();
   const minTime = new Date(now.getTime() + CONFIG.minLeadMinutes*60000);
+  const stepMs = CONFIG.slotMinutes*60000;
 
   const groups = [
     {label:"Morning", from: CONFIG.hourStart, to: 12},
@@ -650,9 +654,11 @@ function buildSlots(){
     const grid = document.createElement("div");
     grid.className = "slots";
 
-    for (let h = g.from; h < g.to; h++){
-      const start = new Date(state.date); start.setHours(h,0,0,0);
-      const end   = new Date(state.date); end.setHours(h+1,0,0,0);
+    const groupStart = new Date(state.date); groupStart.setHours(g.from,0,0,0);
+    const groupEnd   = new Date(state.date); groupEnd.setHours(g.to,0,0,0);
+    for (let t = groupStart.getTime(); t < groupEnd.getTime(); t += stepMs){
+      const start = new Date(t);
+      const end   = new Date(t + stepMs);
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "slot";
@@ -735,7 +741,7 @@ form.addEventListener("submit", async (e) => {
   errEl.textContent = "";
 
   if (!state.date) return fail("Pick a day above.");
-  if (!state.slot) return fail("Pick a one-hour window.");
+  if (!state.slot) return fail("Pick a 30-minute window.");
   if (!$("firstName").value.trim() || !$("lastName").value.trim()) return fail("Tell us your name.");
   const phoneDigits = $("phone").value.replace(/\D/g,"");
   if (phoneDigits.length < 6) return fail("Please enter a valid phone number.");

@@ -801,7 +801,7 @@ function showSuccess(p){
       footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
     } else {
       loadConfigStandalone();
-      footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "Set cbk_FlowTriggerUrl env var or ?api= URL parameter";
+      footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "";
     }
   } catch(e){
     console.error("[cbk] init failed", e);

@@ -86,21 +86,6 @@ Replace `<your-org>` with your org subdomain (e.g. `contoso`).
 
 > When opened directly in the browser while logged in to Dynamics 365, the page uses your session cookies to authenticate. This is the quickest way to verify the setup.
 
-### Embedding in a voice session (recommended)
-
-To surface the booking page automatically when a voice callback session opens:
-
-1. In **Customer Service Admin Center > Workstreams**, open your voice workstream
-2. Navigate to **Session templates** and open (or create) the session template used for callbacks
-3. Under **Application tabs**, click **Add** and create a new Application Tab Template:
-   - **Name:** e.g. `Callback Booking`
-   - **Page type:** Web Resource
-   - **Web resource name:** `cbk_cbk/callback_app`
-4. Link this tab template to the session template
-5. Save and publish
-
-The booking tab will appear automatically in the tab strip whenever an agent handles a callback session.
-
 ---
 
 ## Creating Workstream Context Variables

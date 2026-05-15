@@ -318,7 +318,7 @@ const MODE = XRM ? "AGENT" : "CUSTOMER";
    - AGENT mode: reads cbk_* environment variables from Dataverse
    - CUSTOMER mode: reads URL params + sensible defaults; flow URL required
    ============================================================================ */
-const DEFAULTS = { hourStart: 8, hourEnd: 23, slotMinutes: 30, daysAhead: 14 };
+const DEFAULTS = { hourStart: 0, hourEnd: 24, slotMinutes: 30, daysAhead: 14 };
 let CONFIG = { ...DEFAULTS, proactiveEngagementConfigId: null, flowTriggerUrl: null, orgUrl: null };
 
 async function loadConfigFromXrm(){
@@ -664,7 +664,7 @@ function buildSlots(){
   slotsHost.innerHTML = "";
   const minTime = new Date();
   const stepMs = CONFIG.slotMinutes*60000;
-  const groups = [{label:"Morning",from:CONFIG.hourStart,to:12},{label:"Afternoon",from:12,to:CONFIG.hourEnd}];
+  const groups = [{label:"Morning",from:CONFIG.hourStart,to:12},{label:"Afternoon",from:12,to:18},{label:"Evening",from:18,to:CONFIG.hourEnd}].filter(g=>g.from<g.to && g.from<CONFIG.hourEnd && g.to>CONFIG.hourStart);
   for (const g of groups){
     const section = document.createElement("div"); section.className = "slot-section";
     const label = document.createElement("div"); label.className = "slot-label"; label.textContent = g.label; section.appendChild(label);

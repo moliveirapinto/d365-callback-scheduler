@@ -9,12 +9,11 @@ A customer-facing self-service callback booking page for Microsoft Dynamics 365 
 1. [What It Does](#what-it-does)
 2. [Prerequisites](#prerequisites)
 3. [Installation](#installation)
-4. [Post-Install Configuration](#post-install-configuration)
-5. [Accessing the Booking Page](#accessing-the-booking-page)
-6. [Creating Workstream Context Variables](#creating-workstream-context-variables)
-7. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
-8. [Topic Options](#topic-options)
-9. [Uninstalling](#uninstalling)
+4. [Accessing the Booking Page](#accessing-the-booking-page)
+5. [Creating Workstream Context Variables](#creating-workstream-context-variables)
+6. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
+7. [Topic Options](#topic-options)
+8. [Uninstalling](#uninstalling)
 
 ---
 
@@ -68,38 +67,6 @@ Before installing, confirm you have:
 5. Review the solution details and click **Import**
 6. Wait for the import to complete (may take 1-3 minutes). A green checkmark confirms success.
 7. Click **Publish all customizations** to activate everything
-
----
-
-## Post-Install Configuration
-
-After import, the solution creates several environment variables that control the booking page behavior. You must set at least `cbk_ProactiveEngagementConfigId`.
-
-### Find your Proactive Engagement Configuration ID
-
-1. In [Customer Service Admin Center](https://admin.powerplatform.microsoft.com), navigate to **Proactive engagement** (under Voice)
-2. Open your Proactive Engagement Configuration
-3. Copy the GUID from the browser URL - it appears between parentheses, e.g.
-   `.../msdyn_proactive_engagement_configs(xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)`
-
-> **Tip:** If you have only one Proactive Engagement Configuration in your org, the booking page auto-detects and auto-selects it - you can skip this step.
-
-### Set environment variables
-
-1. In **make.powerapps.com > Solutions**, open **Callback Scheduler for D365 Contact Center**
-2. In the left panel, click **Environment variables**
-3. For each variable below, click the three-dot menu > **Edit current value** and enter a value:
-
-| Variable | Type | Description | Default |
-|---|---|---|---|
-| `cbk_ProactiveEngagementConfigId` | Text | GUID of the Proactive Engagement Configuration | *(required)* |
-| `cbk_HourStart` | Number | First bookable hour of the day (24-hour, org timezone) | `9` |
-| `cbk_HourEnd` | Number | Last bookable hour of the day (24-hour, org timezone) | `18` |
-| `cbk_SlotMinutes` | Number | Duration of each callback slot in minutes | `30` |
-| `cbk_DaysAhead` | Number | How many calendar days ahead to show on the calendar | `14` |
-| `cbk_FlowTriggerUrl` | Text | *(Optional)* Power Automate HTTP-trigger URL for external/standalone mode | - |
-
-4. Click **Save** after editing each variable
 
 ---
 

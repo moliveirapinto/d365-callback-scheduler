@@ -21,6 +21,7 @@ A customer-facing self-service callback booking page for Microsoft Dynamics 365 
 
 The solution deploys a polished booking page as an HTML web resource inside Dynamics 365. Customers can:
 
+- See the **live average waiting time** for a callback, pulled in real time from your environment
 - Select a day and time window from a live availability calendar
 - Specify what their call is about (loaded dynamically from your topic choices)
 - Leave optional notes for the agent

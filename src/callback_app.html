@@ -244,7 +244,7 @@
             </div>
             <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
             <div class="field"><label for="topic">What's it about?</label>
-              <select id="topic" required>
+              <select id="topic">
                 <option value="" disabled selected>Loading topics...</option>
               </select>
             </div>
@@ -720,7 +720,7 @@ form.addEventListener("submit", async (e) => {
   const phoneDigits = $("phone").value.replace(/\D/g,"");
   if (phoneDigits.length < 6) return fail("Enter a valid phone number.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("email").value)) return fail("Enter a valid email.");
-  if (!$("topic").value) return fail("Pick a topic.");
+  // topic is optional
   if (!$("consent").checked) return fail("Please confirm consent to be called.");
 
   const phoneE164 = ($("country").value + phoneDigits).replace(/[^\d+]/g,"");

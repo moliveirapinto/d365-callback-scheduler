@@ -1,0 +1,1014 @@
+<!doctype html>
+<!--
+  Callback Scheduler — D365 Contact Center
+  Web resource version. Works in any environment / any tenant with no hardcoded ids.
+
+  Runtime modes:
+    AGENT   - opened inside a D365 model-driven app (uses parent.Xrm.WebApi).
+    CUSTOMER- opened standalone (anonymous). Requires a Power Automate flow URL
+              passed via env var cbk_FlowTriggerUrl OR ?api= URL parameter.
+
+  All configuration is loaded from solution Environment Variables at startup:
+    cbk_ProactiveEngagementConfigId  (string, optional - auto-discovered if blank)
+    cbk_HourStart                    (number, default 9)
+    cbk_HourEnd                      (number, default 18)
+    cbk_SlotMinutes                  (number, default 30)
+    cbk_DaysAhead                    (number, default 14)
+    cbk_FlowTriggerUrl               (string, optional - customer-mode endpoint)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Schedule a callback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#fff5e6; --ink:#0b1020; --ink-2:#1a2040; --muted:#5b6075;
+    --line:rgba(11,16,32,.12); --line-2:rgba(11,16,32,.08);
+    --accent:#ff5e8a; --accent-2:#ff8a5e; --good:#15a371;
+    --shadow-lg:0 20px 50px -20px rgba(11,16,32,.25);
+    --shadow-sm:0 4px 14px -6px rgba(11,16,32,.15);
+    --radius:22px;
+    --serif:"Fraunces",ui-serif,Georgia,serif;
+    --sans:"Inter",ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans);color:var(--ink);
+    background:radial-gradient(1200px 600px at 80% -10%, #ffe6c8 0%, transparent 60%),
+               radial-gradient(800px 400px at -10% 110%, #ffd2cc 0%, transparent 60%),
+               var(--bg);
+    min-height:100dvh;
+  }
+  .shell{position:relative;max-width:1140px;margin:0 auto;padding:28px 22px 80px}
+  .top{position:absolute;top:28px;right:22px;display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0;z-index:50}
+  .brand{display:inline-flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--accent-2),var(--accent));box-shadow:0 6px 18px -6px rgba(255,94,138,.6)}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .pill .live{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px rgba(21,163,113,.18);animation:p 1.6s ease-in-out infinite}
+  .ws-pill{position:relative;display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line-2);padding:6px 14px;border-radius:999px;box-shadow:var(--shadow-sm);color:var(--ink);transition:border-color .15s ease, box-shadow .15s ease}
+  .ws-pill:hover{border-color:rgba(255,94,138,.35);box-shadow:0 6px 16px -10px rgba(255,94,138,.35)}
+  .ws-pill .ws-icon{width:14px;height:14px;color:var(--accent);flex-shrink:0}
+  .ws-pill .ws-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+  .ws-trigger{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:transparent;border:0;padding:2px 0;border-radius:999px;outline:none}
+  .ws-trigger:focus-visible{outline:2px solid rgba(255,94,138,.5);outline-offset:3px}
+  .ws-trigger .ws-current{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ws-trigger .ws-caret{width:10px;height:6px;color:var(--muted);transition:transform .2s ease;flex-shrink:0}
+  .ws-pill[data-open="true"] .ws-caret{transform:rotate(180deg)}
+  .ws-menu{position:absolute;top:calc(100% + 8px);left:0;min-width:280px;max-width:360px;background:#fff;border:1px solid rgba(11,16,32,.08);border-radius:14px;box-shadow:0 24px 60px -20px rgba(11,16,32,.30),0 6px 16px -6px rgba(11,16,32,.10);padding:6px;z-index:200;animation:wsmenu .15s ease-out}
+  .ws-menu[hidden]{display:none}
+  @keyframes wsmenu{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .ws-menu-head{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--muted);padding:10px 12px 6px}
+  .ws-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;border-radius:10px;cursor:pointer;font:inherit;font-size:13.5px;color:var(--ink);text-align:left;transition:background .1s ease}
+  .ws-item:hover,.ws-item:focus-visible{background:#fff5e6;outline:none}
+  .ws-item .ws-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+  .ws-item .ws-tick{width:16px;height:16px;color:var(--good);opacity:0;flex-shrink:0}
+  .ws-item.is-selected{background:#fff8f0}
+  .ws-item.is-selected .ws-tick{opacity:1}
+  .ws-item.is-selected .ws-name{font-weight:700}
+  .ws-menu-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
+  .ws-pill .ws-status{font-size:12px;font-weight:700;color:var(--good);min-width:10px;text-align:center;transition:opacity .2s ease}
+  .ws-pill .ws-status.err{color:var(--accent)}
+  .ws-pill .ws-status.spin{color:var(--muted);display:inline-block;animation:wsspin 1s linear infinite}
+  @keyframes wsspin{to{transform:rotate(360deg)}}
+  @keyframes p{50%{transform:scale(1.2);box-shadow:0 0 0 7px rgba(21,163,113,.05)}}
+  .hero{margin:6px 0 28px}
+  .hero h1{font-family:var(--serif);font-weight:900;font-size:clamp(34px,5.6vw,64px);line-height:1.02;letter-spacing:-.02em;margin:8px 0 12px}
+  .hero h1 em{font-style:italic;font-weight:700;color:var(--accent)}
+  .hero .lede{font-size:clamp(15px,1.7vw,18px);max-width:60ch;color:#3a3f57;line-height:1.55}
+  .hero-meta{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);padding:8px 12px;border-radius:999px;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .chip svg{width:14px;height:14px}
+  .grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.9fr);gap:24px;align-items:stretch}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border-radius:var(--radius);border:1px solid var(--line-2);box-shadow:var(--shadow-lg);padding:clamp(20px,3vw,36px)}
+  .card+.card{margin-top:24px}
+  .step{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .step .num{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;font-family:var(--serif)}
+  .step h2{margin:0;font-family:var(--serif);font-weight:700;font-size:clamp(20px,2.2vw,26px);letter-spacing:-.01em}
+  .step .hint{margin-left:auto;color:var(--muted);font-size:13px}
+  .dates{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 14px;margin:0 -6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .dates::-webkit-scrollbar{height:6px}
+  .dates::-webkit-scrollbar-thumb{background:rgba(11,16,32,.15);border-radius:99px}
+  .day{flex:0 0 auto;min-width:84px;scroll-snap-align:start;padding:14px 10px 12px;border-radius:14px;border:1px solid var(--line);background:#fff;text-align:center;cursor:pointer;transition:transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;user-select:none}
+  .day .dow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .day .num{font-family:var(--serif);font-weight:700;font-size:26px;line-height:1;margin-top:6px}
+  .day .mon{font-size:11px;color:var(--muted);margin-top:4px}
+  .day:hover{transform:translateY(-1px);border-color:rgba(255,94,138,.45)}
+  .day.is-today{border-color:rgba(11,16,32,.35)}
+  .day.is-selected{background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;border-color:transparent;box-shadow:0 10px 24px -10px rgba(11,16,32,.45)}
+  .day.is-selected .dow,.day.is-selected .mon{color:rgba(255,255,255,.7)}
+  .day.is-disabled{opacity:.35;pointer-events:none}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-top:8px}
+  .slot{appearance:none;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 8px;cursor:pointer;font-weight:600;font-size:14px;transition:transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease}
+  .slot small{display:block;color:var(--muted);font-weight:500;font-size:11px;margin-top:2px}
+  .slot:hover{border-color:rgba(255,94,138,.5);transform:translateY(-1px)}
+  .slot.is-selected{background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;border-color:transparent}
+  .slot.is-selected small{color:rgba(255,255,255,.85)}
+  .slot[disabled]{opacity:.4;cursor:not-allowed}
+  .slot-section+.slot-section{margin-top:14px}
+  .slot-label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:14px 0 8px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  @media (max-width:640px){.form{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.full{grid-column:1/-1}
+  .field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .field input,.field select,.field textarea{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;font:inherit;color:var(--ink);transition:border-color .12s ease, box-shadow .12s ease}
+  .field textarea{min-height:96px;resize:vertical}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(255,94,138,.15)}
+  .phone-row{display:grid;grid-template-columns:120px 1fr;gap:8px}
+  .consent{display:flex;gap:14px;align-items:center;padding:16px 18px;border-radius:14px;background:linear-gradient(135deg,#fffaf2,#fff5e6);border:1px solid rgba(11,16,32,.10);margin-top:8px;cursor:pointer;transition:border-color .15s ease, box-shadow .15s ease, background .15s ease}
+  .consent:hover{border-color:rgba(255,94,138,.45);box-shadow:0 6px 18px -10px rgba(255,94,138,.35)}
+  .consent:has(input:checked){background:linear-gradient(135deg,#fff,#f3fbf6);border-color:rgba(21,163,113,.5);box-shadow:0 6px 18px -10px rgba(21,163,113,.35)}
+  .consent .check-box{position:relative;width:22px;height:22px;border-radius:7px;border:1.5px solid rgba(11,16,32,.35);background:#fff;flex-shrink:0;display:grid;place-items:center;transition:background .15s ease, border-color .15s ease}
+  .consent input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+  .consent input:checked + .check-box{background:var(--good);border-color:var(--good)}
+  .consent input:checked + .check-box::after{content:"";width:11px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+  .consent input:focus-visible + .check-box{outline:2px solid rgba(255,94,138,.5);outline-offset:2px}
+  .consent .copy{font-size:14px;color:#2a2f47;line-height:1.5;font-weight:500;letter-spacing:normal;text-transform:none;font-family:var(--sans)}
+  .consent .copy b{font-weight:700;color:var(--ink)}
+  .consent .copy small{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-weight:400}
+  .submit-row{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-top:22px;flex-wrap:wrap}
+  .btn{appearance:none;cursor:pointer;border:0;padding:16px 26px;border-radius:14px;font-weight:700;background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;box-shadow:0 12px 30px -12px rgba(11,16,32,.5);display:inline-flex;align-items:center;gap:10px}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .btn.ghost{background:transparent;color:var(--ink);box-shadow:none;border:1px solid var(--line)}
+  .err{color:#c43054;font-size:13px;font-weight:600;min-height:18px}
+  .pass{position:sticky;top:20px;align-self:start;background:linear-gradient(180deg,#0b1020 0%,#1a2040 100%);color:#fff;border-radius:24px;padding:26px;box-shadow:var(--shadow-lg);overflow:hidden;isolation:isolate}
+  .pass::before{content:"";position:absolute;inset:auto -40px -40px auto;width:220px;height:220px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,94,138,.5),transparent 70%);z-index:-1}
+  .pass::after{content:"";position:absolute;left:-30px;right:-30px;top:60%;border-top:2px dashed rgba(255,255,255,.18)}
+  .pass .label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700}
+  .pass h3{font-family:var(--serif);font-weight:700;font-size:28px;line-height:1.05;margin:6px 0 18px;letter-spacing:-.01em}
+  .pass .when{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-bottom:8px}
+  .pass .when .col .label{margin-bottom:4px}
+  .pass .when .col .v{font-family:var(--serif);font-weight:700;font-size:22px}
+  .pass .when .arrow{width:48px;height:2px;background:rgba(255,255,255,.4);position:relative}
+  .pass .when .arrow::after{content:"";position:absolute;right:-2px;top:-4px;border-left:8px solid rgba(255,255,255,.6);border-top:5px solid transparent;border-bottom:5px solid transparent}
+  .pass dl{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;margin:24px 0 0}
+  .pass dt{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700;margin-bottom:4px}
+  .pass dd{margin:0;font-weight:600;font-size:15px;word-break:break-word}
+  .pass .empty{color:rgba(255,255,255,.4);font-weight:400;font-style:italic;font-size:14px}
+  .success-stage{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:linear-gradient(180deg,#fff5e6 0%,#ffe9d6 60%,#ffd9c2 100%);overflow:auto;z-index:100}
+  .success{position:relative;text-align:center;padding:48px 36px 36px;max-width:520px;width:100%;box-sizing:border-box;animation:popIn .45s cubic-bezier(.2,.9,.3,1.2)}
+  .success-close{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:0;background:rgba(0,0,0,.05);color:#5b6170;font-size:22px;line-height:1;cursor:pointer;display:grid;place-items:center;transition:background .15s,color .15s,transform .1s;padding:0}
+  .success-close:hover{background:rgba(0,0,0,.1);color:#1a1a1a}
+  .success-close:active{transform:scale(.94)}
+  .success-close:focus-visible{outline:2px solid var(--accent,#1a73e8);outline-offset:2px}
+  @keyframes popIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+  .success .check{width:78px;height:78px;border-radius:50%;background:linear-gradient(135deg,var(--good),#0d8a55);display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 18px 40px -16px rgba(13,138,85,.6)}
+  .success h2{font-family:var(--serif);font-weight:700;font-size:36px;margin:0 0 8px;letter-spacing:-.01em}
+  .success .lede{color:var(--muted);margin:0 auto 26px;font-size:15px;max-width:38ch}
+  .success .summary{display:grid;grid-template-columns:1fr;gap:10px;margin:0 auto 22px;max-width:380px;text-align:left}
+  .success .row{display:flex;align-items:center;gap:14px;background:#fff8f0;border:1px solid rgba(11,16,32,.08);border-radius:14px;padding:14px 16px}
+  .success .row .ico{width:38px;height:38px;border-radius:10px;background:#fff;border:1px solid rgba(11,16,32,.08);display:grid;place-items:center;color:var(--accent);flex-shrink:0}
+  .success .row .ico svg{width:20px;height:20px}
+  .success .row .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:2px}
+  .success .row .val{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1.25}
+  .success .recap{margin:18px auto 0;max-width:380px;text-align:left;background:#fff8f0;border:1px dashed rgba(11,16,32,.18);border-radius:14px;padding:14px 16px;font-size:13.5px;color:var(--muted)}
+  .success .recap b{color:var(--ink)}
+  footer.foot{margin-top:40px;color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;align-items:center;text-align:center}
+  .mobile-cta{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(255,245,230,0) 0%,rgba(255,245,230,.95) 50%);backdrop-filter:blur(8px)}
+  .mobile-cta .btn{width:100%;justify-content:center}
+  @media (max-width:860px){.mobile-cta{display:block}.pass{position:static}}
+  .mode-banner{display:inline-flex;gap:6px;align-items:center;background:#fff;border:1px solid var(--line-2);padding:6px 10px;border-radius:999px;font-size:11px;font-weight:600;color:var(--muted)}
+  .mode-banner .mdot{width:6px;height:6px;border-radius:50%;background:var(--good)}
+  .mode-banner.demo .mdot{background:#e8a23e}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="pill" title="Average wait if you call us right now"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="ws-pill" data-open="false">
+      <svg class="ws-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      <span class="ws-label">Workstream</span>
+      <button type="button" class="ws-trigger" id="wsTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="ws-current" id="wsCurrent">Loading…</span>
+        <svg class="ws-caret" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+      </button>
+      <span id="wsStatus" class="ws-status" aria-live="polite"></span>
+      <div class="ws-menu" id="wsMenu" role="listbox" hidden>
+        <div class="ws-menu-head">Pick a workstream</div>
+        <div id="wsMenuInner"></div>
+      </div>
+    </div>
+    <h1>Pick a time. <em>We'll ring you back.</em></h1>
+    <p class="lede">Tell us when works for you. A specialist will call within your chosen window — no queues, no waiting on hold.</p>
+    <div class="hero-meta">
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg> Free</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12l5 5L20 7"/></svg> No account needed</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg> Cancel anytime</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div>
+      <form id="form" novalidate>
+        <section class="card">
+          <div class="step"><div class="num">1</div><h2>Choose a day</h2><span class="hint" id="tzHint"></span></div>
+          <div class="dates" id="dates" role="listbox" aria-label="Available days"></div>
+        </section>
+
+        <section class="card">
+          <div class="step"><div class="num">2</div><h2>Pick a window</h2><span class="hint">Local time</span></div>
+          <div id="slotsHost"></div>
+        </section>
+
+        <section class="card">
+          <div class="step"><div class="num">3</div><h2>Your details</h2></div>
+          <div class="form">
+            <div class="field"><label for="firstName">First name</label><input id="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Last name</label><input id="lastName" autocomplete="family-name" required></div>
+            <div class="field full"><label for="phone">Mobile number</label>
+              <div class="phone-row">
+                <select id="country" aria-label="Country code">
+                  <option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option>
+                  <option value="+351">🇵🇹 +351</option><option value="+34">🇪🇸 +34</option>
+                  <option value="+33">🇫🇷 +33</option><option value="+49">🇩🇪 +49</option>
+                  <option value="+55">🇧🇷 +55</option><option value="+52">🇲🇽 +52</option>
+                  <option value="+91">🇮🇳 +91</option><option value="+61">🇦🇺 +61</option>
+                  <option value="+81">🇯🇵 +81</option><option value="+971">🇦🇪 +971</option>
+                </select>
+                <input id="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="555 0123" required>
+              </div>
+            </div>
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+            <div class="field"><label for="topic">What's it about?</label>
+              <select id="topic" required>
+                <option value="" disabled selected>Loading topics...</option>
+              </select>
+            </div>
+            <div class="field full"><label for="notes">Anything we should know? <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">(optional)</span></label>
+              <textarea id="notes" maxlength="500" placeholder="Order #, account email, or a quick description…"></textarea>
+            </div>
+            <div class="field full"><label class="consent">
+              <span style="position:relative;display:inline-block;width:22px;height:22px;flex-shrink:0">
+                <input type="checkbox" id="consent" required>
+                <span class="check-box" aria-hidden="true"></span>
+              </span>
+              <span class="copy"><b>I agree to be contacted by phone</b> at the number above for the purpose of this callback.</span>
+            </label></div>
+          </div>
+          <div class="submit-row">
+            <span class="err" id="err" role="alert" aria-live="polite"></span>
+            <div style="display:flex;gap:10px">
+              <button type="button" class="btn ghost" id="resetBtn">Reset</button>
+              <button type="submit" class="btn" id="submitBtn"><span>Schedule my callback</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+      </form>
+    </div>
+
+    <aside>
+      <div class="pass" id="pass">
+        <div class="label">Your callback</div>
+        <h3 id="passTitle">Let's get you sorted</h3>
+        <div class="when">
+          <div class="col"><div class="label">Date</div><div class="v" id="passDate"><span class="empty">— pick a day</span></div></div>
+          <div class="arrow" aria-hidden="true"></div>
+          <div class="col" style="text-align:right"><div class="label">Window</div><div class="v" id="passSlot"><span class="empty">— pick a time</span></div></div>
+        </div>
+        <dl>
+          <div><dt>Calling you at</dt><dd id="passPhone"><span class="empty">your number</span></dd></div>
+          <div><dt>About</dt><dd id="passTopic"><span class="empty">your topic</span></dd></div>
+          <div><dt>Confirmation to</dt><dd id="passEmail"><span class="empty">your email</span></dd></div>
+          <div><dt>Time zone</dt><dd id="passTz">—</dd></div>
+        </dl>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="foot">
+    <div>© <span id="year"></span> · Powered by Dynamics 365 Contact Center</div>
+    <div id="footEnv"></div>
+  </footer>
+</div>
+
+<div class="mobile-cta"><button class="btn" id="mobileSubmit" type="button">Schedule my callback</button></div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   Mode detection — AGENT (inside D365) or CUSTOMER (standalone + flow URL)
+   ============================================================================ */
+function getXrm(){
+  try { if (window.parent && window.parent !== window && window.parent.Xrm) return window.parent.Xrm; } catch(e){}
+  try { if (window.Xrm) return window.Xrm; } catch(e){}
+  return null;
+}
+const XRM = getXrm();
+const MODE = XRM ? "AGENT" : "CUSTOMER";
+
+/* ============================================================================
+   Configuration loader
+   - AGENT mode: reads cbk_* environment variables from Dataverse
+   - CUSTOMER mode: reads URL params + sensible defaults; flow URL required
+   ============================================================================ */
+const DEFAULTS = { hourStart: 8, hourEnd: 23, slotMinutes: 30, daysAhead: 14 };
+let CONFIG = { ...DEFAULTS, proactiveEngagementConfigId: null, flowTriggerUrl: null, orgUrl: null };
+
+async function loadConfigFromXrm(){
+  const ctx = XRM.Utility.getGlobalContext();
+  CONFIG.orgUrl = ctx.getClientUrl();
+
+  // Pull every cbk_ env var in one call
+  const r = await XRM.WebApi.retrieveMultipleRecords(
+    "environmentvariabledefinition",
+    "?$select=schemaname,defaultvalue,type" +
+    "&$filter=startswith(schemaname,'cbk_')" +
+    "&$expand=environmentvariabledefinition_environmentvariablevalue($select=value)"
+  );
+  const map = {};
+  for (const d of r.entities) {
+    const v = d["environmentvariabledefinition_environmentvariablevalue"];
+    map[d.schemaname] = (v && v.length) ? v[0].value : d.defaultvalue;
+  }
+  const num = (k, fallback) => {
+    const x = parseInt(map[k], 10); return isFinite(x) ? x : fallback;
+  };
+  CONFIG.proactiveEngagementConfigId = (map["cbk_ProactiveEngagementConfigId"] || "").trim() || null;
+  CONFIG.flowTriggerUrl              = (map["cbk_FlowTriggerUrl"] || "").trim() || null;
+  CONFIG.hourStart                   = num("cbk_HourStart",  DEFAULTS.hourStart);
+  CONFIG.hourEnd                     = num("cbk_HourEnd",    DEFAULTS.hourEnd);
+  CONFIG.slotMinutes                 = num("cbk_SlotMinutes",DEFAULTS.slotMinutes);
+  CONFIG.daysAhead                   = num("cbk_DaysAhead",  DEFAULTS.daysAhead);
+
+  // Auto-discover proactive engagement config if not set
+  if (!CONFIG.proactiveEngagementConfigId) {
+    try {
+      const c = await XRM.WebApi.retrieveMultipleRecords(
+        "msdyn_proactive_engagement_config",
+        "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=1"
+      );
+      if (c.entities.length) {
+        CONFIG.proactiveEngagementConfigId = c.entities[0].msdyn_proactive_engagement_configid;
+        console.info("[cbk] auto-discovered proactive engagement config:", c.entities[0].msdyn_name);
+      }
+    } catch(e){ console.warn("[cbk] proactive config auto-discovery failed", e); }
+  }
+}
+
+function loadConfigStandalone(){
+  const url = new URL(window.location.href);
+  CONFIG.flowTriggerUrl              = url.searchParams.get("api") || null;
+  CONFIG.proactiveEngagementConfigId = url.searchParams.get("cfg") || null;
+  CONFIG.hourStart                   = parseInt(url.searchParams.get("h0"), 10) || DEFAULTS.hourStart;
+  CONFIG.hourEnd                     = parseInt(url.searchParams.get("h1"), 10) || DEFAULTS.hourEnd;
+  CONFIG.slotMinutes                 = parseInt(url.searchParams.get("slot"), 10) || DEFAULTS.slotMinutes;
+  CONFIG.daysAhead                   = parseInt(url.searchParams.get("days"), 10) || DEFAULTS.daysAhead;
+}
+
+/* ============================================================================
+   Dataverse helpers (AGENT mode only)
+   ============================================================================ */
+async function resolveContactXrm(p){
+  const esc = s => String(s).replace(/'/g, "''");
+  const clauses = [];
+  if (p.email)     clauses.push(`emailaddress1 eq '${esc(p.email)}'`);
+  if (p.phoneE164) {
+    clauses.push(`mobilephone eq '${esc(p.phoneE164)}'`);
+    clauses.push(`telephone1 eq '${esc(p.phoneE164)}'`);
+  }
+  if (clauses.length) {
+    const q = "?$select=contactid,emailaddress1,mobilephone,telephone1,modifiedon,fullname"
+            + "&$filter=" + clauses.join(" or ") + "&$top=25";
+    const r = await XRM.WebApi.retrieveMultipleRecords("contact", q);
+    if (r.entities.length) {
+      const score = c => {
+        const eHit = p.email && c.emailaddress1 && c.emailaddress1.toLowerCase() === p.email.toLowerCase();
+        const pHit = p.phoneE164 && (c.mobilephone === p.phoneE164 || c.telephone1 === p.phoneE164);
+        return (eHit && pHit) ? 100 : pHit ? 50 : eHit ? 25 : 0;
+      };
+      r.entities.sort((a,b) => score(b)-score(a)
+        || String(b.modifiedon||"").localeCompare(String(a.modifiedon||"")));
+      return r.entities[0].contactid;
+    }
+  }
+  const created = await XRM.WebApi.createRecord("contact", {
+    firstname: p.firstName, lastname: p.lastName,
+    emailaddress1: p.email, mobilephone: p.phoneE164, telephone1: p.phoneE164
+  });
+  return created.id;
+}
+
+function buildActionRequest(p, contactId){
+  const inputAttrs = {
+    // Workstream context variables -> mapped onto Conversation columns by routing rule
+    cbk_whatsitabout_:        parseInt(p.topic, 10),     // Number  -> cbk_whatsitabout_ (D365 strips the literal name 'whats_it_about' from context items)
+    anything_we_should_know: p.notes || "",             // Text    -> maulabs_anythingweshouldknow
+    // Diagnostics / extras (kept on proactive_delivery.msdyn_inputattributes)
+    type: "callback", firstName: p.firstName, lastName: p.lastName,
+    consentTimestampUtc: p.consentTimestampUtc,
+    customerEmail: p.email, customerLocale: p.locale, customerTimeZone: p.timeZone,
+    sourceUrl: window.location.href
+  };
+  return {
+    ApiVersion: "1.0",
+    ProactiveEngagementConfigId: CONFIG.proactiveEngagementConfigId,
+    DestinationPhoneNumber: p.phoneE164,
+    ContactId: contactId,
+    Windows:         JSON.stringify([{ Start: p.windowStartIso, End: p.windowEndIso }]),
+    InputAttributes: JSON.stringify(inputAttrs),
+    getMetadata: () => ({
+      boundParameter: null, operationType: 0,
+      operationName: "CCaaS_CreateProactiveVoiceDelivery",
+      parameterTypes: {
+        // The CCaaS action validates the body against a strongly-typed C# DTO
+        // that expects these as plain JSON strings -- declaring them as Edm.Guid
+        // here makes Xrm.WebApi serialize them in a shape the server model can't bind
+        // ("could not be converted to ... VoiceDeliveryRequest" at $.ProactiveEngagementConfigId).
+        ApiVersion:                  { typeName: "Edm.String", structuralProperty: 1 },
+        ProactiveEngagementConfigId: { typeName: "Edm.String", structuralProperty: 1 },
+        DestinationPhoneNumber:      { typeName: "Edm.String", structuralProperty: 1 },
+        ContactId:                   { typeName: "Edm.String", structuralProperty: 1 },
+        Windows:                     { typeName: "Edm.String", structuralProperty: 1 },
+        InputAttributes:             { typeName: "Edm.String", structuralProperty: 1 }
+      }
+    })
+  };
+}
+
+async function callActionXrm(p, contactId){
+  const req = buildActionRequest(p, contactId);
+  const r = await XRM.WebApi.execute(req);
+  if (!r.ok) throw new Error("Action returned " + r.status);
+  return r.json();
+}
+
+/* CUSTOMER-mode (standalone /WebResources/) helpers - same-origin cookies authorize us. */
+function dvBase(){ return window.location.origin + "/api/data/v9.2"; }
+const DV_HEADERS = { Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0", "Content-Type":"application/json; charset=utf-8" };
+
+async function resolveContactFetch(p){
+  const esc = s => String(s).replace(/'/g, "''");
+  const clauses = [];
+  if (p.email)     clauses.push(`emailaddress1 eq '${esc(p.email)}'`);
+  if (p.phoneE164) {
+    clauses.push(`mobilephone eq '${esc(p.phoneE164)}'`);
+    clauses.push(`telephone1 eq '${esc(p.phoneE164)}'`);
+  }
+  if (clauses.length){
+    const url = dvBase() + "/contacts?$select=contactid,emailaddress1,mobilephone,telephone1,modifiedon,fullname"
+              + "&$filter=" + encodeURIComponent(clauses.join(" or ")) + "&$top=25";
+    const r = await fetch(url, { credentials:"include", headers: DV_HEADERS });
+    if (!r.ok) throw new Error("contact lookup HTTP " + r.status);
+    const j = await r.json();
+    if (j.value.length){
+      const score = c => {
+        const eHit = p.email && c.emailaddress1 && c.emailaddress1.toLowerCase() === p.email.toLowerCase();
+        const pHit = p.phoneE164 && (c.mobilephone === p.phoneE164 || c.telephone1 === p.phoneE164);
+        return (eHit && pHit) ? 100 : pHit ? 50 : eHit ? 25 : 0;
+      };
+      j.value.sort((a,b) => score(b)-score(a) || String(b.modifiedon||"").localeCompare(String(a.modifiedon||"")));
+      return j.value[0].contactid;
+    }
+  }
+  const create = await fetch(dvBase() + "/contacts", {
+    method:"POST", credentials:"include",
+    headers: { ...DV_HEADERS, Prefer:"return=representation" },
+    body: JSON.stringify({
+      firstname: p.firstName, lastname: p.lastName,
+      emailaddress1: p.email, mobilephone: p.phoneE164, telephone1: p.phoneE164
+    })
+  });
+  if (!create.ok) throw new Error("contact create HTTP " + create.status);
+  const j = await create.json();
+  return j.contactid;
+}
+
+async function ensureConfigIdFetch(){
+  if (CONFIG.proactiveEngagementConfigId) return CONFIG.proactiveEngagementConfigId;
+  // Pick the first active proactive engagement config in the org.
+  const url = dvBase() + "/msdyn_proactive_engagement_configs?$select=msdyn_proactive_engagement_configid,msdyn_name,statecode&$filter=statecode eq 0&$top=1";
+  const r = await fetch(url, { credentials:"include", headers: DV_HEADERS });
+  if (!r.ok) throw new Error("config lookup HTTP " + r.status);
+  const j = await r.json();
+  if (!j.value.length) throw new Error("No active Proactive Engagement Config found in this environment.");
+  CONFIG.proactiveEngagementConfigId = j.value[0].msdyn_proactive_engagement_configid;
+  console.info("[cbk] auto-picked proactive config", j.value[0].msdyn_name, CONFIG.proactiveEngagementConfigId);
+  return CONFIG.proactiveEngagementConfigId;
+}
+
+async function callActionFetch(p, contactId){
+  // The action validator requires every InputAttributes value to be a STRING.
+  // Sending numbers/booleans triggers a misleading "Invalid input attributes format" 400.
+  // NB: D365 OmniChannel silently filters the keyword 'whats_it_about' when copying
+  // delivery attributes -> conversation context items, so use 'cbk_whatsitabout_' instead.
+  const inputAttrs = {
+    cbk_whatsitabout_:        String(parseInt(p.topic, 10) || ""),
+    anything_we_should_know: String(p.notes || ""),
+    type: "callback",
+    firstName: String(p.firstName || ""),
+    lastName:  String(p.lastName  || ""),
+    consentTimestampUtc: String(p.consentTimestampUtc || ""),
+    customerEmail:    String(p.email    || ""),
+    customerLocale:   String(p.locale   || ""),
+    customerTimeZone: String(p.timeZone || ""),
+    sourceUrl: String(window.location.href || "")
+  };
+  const body = {
+    ApiVersion: "1.0",
+    ProactiveEngagementConfigId: CONFIG.proactiveEngagementConfigId,
+    DestinationPhoneNumber: p.phoneE164,
+    ContactId: contactId,
+    // Both must be JSON-stringified; Windows MUST stay an array.
+    Windows:         JSON.stringify([{ Start: p.windowStartIso, End: p.windowEndIso }]),
+    InputAttributes: JSON.stringify(inputAttrs)
+  };
+  const r = await fetch(dvBase() + "/CCaaS_CreateProactiveVoiceDelivery", {
+    method:"POST", credentials:"include", headers: DV_HEADERS, body: JSON.stringify(body)
+  });
+  if (!r.ok){
+    let detail = ""; try { detail = " " + (await r.text()).slice(0,400); } catch(e){}
+    throw new Error("Action HTTP " + r.status + detail);
+  }
+  return r.json();
+}
+
+function isSameOriginDataverse(){
+  return /\.crm[0-9]*\.dynamics\.com$/i.test(window.location.hostname)
+      || /\.crm\.dynamics\.com$/i.test(window.location.hostname);
+}
+
+/* Background: PATCH msdyn_customer on every matching outbound conversation
+   that the engagement service spins up inside the booked window.            */
+function bindCustomerLater(p, contactId){
+  const sinceIso = new Date(Date.now() - 60000).toISOString();
+  const phoneTitle = `${p.phoneE164}: Proactive Outbound`;
+  const deadline = Math.min(new Date(p.windowEndIso).getTime() + 120000,
+                            Date.now() + 30*60000);
+  const seen = Object.create(null);
+
+  const tick = async () => {
+    if (Date.now() > deadline) return;
+    try {
+      const q = "?$select=msdyn_ocliveworkitemid,_msdyn_customer_value,createdon"
+              + "&$filter=" + encodeURIComponent(`msdyn_title eq '${phoneTitle}' and createdon ge ${sinceIso}`)
+              + "&$orderby=createdon desc&$top=20";
+      const r = await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", q);
+      for (const c of r.entities) {
+        const cid = c.msdyn_ocliveworkitemid;
+        if (seen[cid]) continue;
+        if (c["_msdyn_customer_value"]) { seen[cid] = true; continue; }
+        try {
+          await XRM.WebApi.updateRecord("msdyn_ocliveworkitem", cid, {
+            "msdyn_customer_msdyn_ocliveworkitem_contact@odata.bind": `/contacts(${contactId})`
+          });
+          seen[cid] = true;
+          console.info("[cbk] bound customer onto conversation", cid);
+        } catch(e){ console.warn("[cbk] bind PATCH failed for", cid, e); }
+      }
+    } catch(e){ console.warn("[cbk] bind poll failed", e); }
+    setTimeout(tick, 8000);
+  };
+  setTimeout(tick, 4000);
+}
+
+/* ============================================================================
+   Live wait metric (AGENT mode reads it directly; CUSTOMER mode hides it)
+   ============================================================================ */
+async function tickLiveWait(){
+  const el = document.getElementById("liveWait");
+  if (!el) return;
+  try {
+    const since = new Date(Date.now() - 24*3600*1000).toISOString();
+    const filter = `createdon ge ${since} and msdyn_conversationfirstwaittimeinseconds ne null`;
+    const qs = "?$select=msdyn_conversationfirstwaittimeinseconds"
+             + "&$filter=" + encodeURIComponent(filter) + "&$top=200";
+    let entities;
+    if (XRM) {
+      const r = await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", qs);
+      entities = r.entities;
+    } else {
+      // Standalone load (e.g. /WebResources/... preview): no Xrm, but the page is
+      // same-origin with the Dataverse OData endpoint, so session cookies authorize us.
+      const url = `${window.location.origin}/api/data/v9.2/msdyn_ocliveworkitems${qs}`;
+      const resp = await fetch(url, {
+        credentials: "include",
+        headers: { Accept: "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" }
+      });
+      if (!resp.ok) { el.textContent = "—"; el.title = "live wait HTTP " + resp.status; return; }
+      const j = await resp.json();
+      entities = j.value;
+    }
+    const vals = entities.map(x => x.msdyn_conversationfirstwaittimeinseconds).filter(v => v != null && v >= 0);
+    if (!vals.length) { el.textContent = "no recent calls"; return; }
+    const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+    el.textContent = avg < 60 ? Math.round(avg) + " sec" : (avg/60).toFixed(1) + " min";
+    el.title = `D365 live: avg of ${vals.length} call(s) in last 24h`;
+  } catch(e){ el.textContent = "—"; el.title = "live wait error: " + (e.message||e); }
+}
+
+/* ============================================================================
+   UI — date strip, slots, summary, submit (largely unchanged from dev version)
+   ============================================================================ */
+const $ = id => document.getElementById(id);
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time";
+$("tzHint").textContent = tz; $("passTz").textContent = tz; $("year").textContent = new Date().getFullYear();
+
+const state = { date: null, slot: null };
+const daysHost = $("dates"), slotsHost = $("slotsHost");
+const dowFmt = new Intl.DateTimeFormat(undefined,{weekday:"short"});
+const monFmt = new Intl.DateTimeFormat(undefined,{month:"short"});
+const timeFmt = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
+const dateLongFmt = new Intl.DateTimeFormat(undefined,{weekday:"long",month:"long",day:"numeric"});
+
+const startOfLocalDay = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+
+function dayHasAvailableSlot(d){
+  const minTime = new Date();
+  const stepMs = CONFIG.slotMinutes*60000;
+  const dayStart = new Date(d); dayStart.setHours(CONFIG.hourStart,0,0,0);
+  const dayEnd   = new Date(d); dayEnd.setHours(CONFIG.hourEnd,0,0,0);
+  for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += stepMs) {
+    if (new Date(t + stepMs) > minTime) return true;
+  }
+  return false;
+}
+function buildDays(){
+  daysHost.innerHTML = "";
+  const today = startOfLocalDay(new Date());
+  let firstAvail = null;
+  for (let i=0; i<CONFIG.daysAhead; i++){
+    const d = new Date(today); d.setDate(today.getDate()+i);
+    const el = document.createElement("button");
+    el.type = "button"; el.className = "day" + (i===0 ? " is-today" : "");
+    el.innerHTML = `<div class="dow">${dowFmt.format(d)}</div><div class="num">${d.getDate()}</div><div class="mon">${monFmt.format(d)}</div>`;
+    if (!dayHasAvailableSlot(d)) el.classList.add("is-disabled");
+    else if (!firstAvail) firstAvail = {d, el};
+    el.addEventListener("click", () => selectDay(d, el));
+    daysHost.appendChild(el);
+  }
+  if (firstAvail) selectDay(firstAvail.d, firstAvail.el);
+}
+function selectDay(d, el){
+  state.date = startOfLocalDay(d); state.slot = null;
+  for (const x of daysHost.children) x.classList.remove("is-selected");
+  el.classList.add("is-selected"); buildSlots(); updatePass();
+}
+function buildSlots(){
+  slotsHost.innerHTML = "";
+  const minTime = new Date();
+  const stepMs = CONFIG.slotMinutes*60000;
+  const groups = [{label:"Morning",from:CONFIG.hourStart,to:12},{label:"Afternoon",from:12,to:CONFIG.hourEnd}];
+  for (const g of groups){
+    const section = document.createElement("div"); section.className = "slot-section";
+    const label = document.createElement("div"); label.className = "slot-label"; label.textContent = g.label; section.appendChild(label);
+    const grid = document.createElement("div"); grid.className = "slots";
+    const a = new Date(state.date); a.setHours(g.from,0,0,0);
+    const b = new Date(state.date); b.setHours(g.to,0,0,0);
+    for (let t = a.getTime(); t < b.getTime(); t += stepMs){
+      const start = new Date(t), end = new Date(t+stepMs);
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "slot";
+      btn.innerHTML = `${timeFmt.format(start)}<small>to ${timeFmt.format(end)}</small>`;
+      if (end <= minTime) btn.disabled = true;
+      else btn.addEventListener("click", () => {
+        state.slot = {start,end};
+        for (const s of slotsHost.querySelectorAll(".slot")) s.classList.remove("is-selected");
+        btn.classList.add("is-selected"); updatePass();
+      });
+      grid.appendChild(btn);
+    }
+    section.appendChild(grid); slotsHost.appendChild(section);
+  }
+}
+function updatePass(){
+  $("passDate").textContent = state.date ? dateLongFmt.format(state.date) : ""; if (!state.date) $("passDate").innerHTML='<span class="empty">— pick a day</span>';
+  $("passSlot").textContent = state.slot ? `${timeFmt.format(state.slot.start)} – ${timeFmt.format(state.slot.end)}` : ""; if (!state.slot) $("passSlot").innerHTML='<span class="empty">— pick a time</span>';
+  const ph = ($("country").value + $("phone").value.replace(/\D/g,""));
+  $("passPhone").textContent = ph.length>2 ? ph : ""; if (ph.length<=2) $("passPhone").innerHTML='<span class="empty">your number</span>';
+  { const sel=$("topic"); const lbl=sel.value ? (sel.options[sel.selectedIndex]?.text || "") : ""; $("passTopic").textContent = lbl; if (!sel.value) $("passTopic").innerHTML='<span class="empty">your topic</span>'; }
+  $("passEmail").textContent = $("email").value || ""; if (!$("email").value) $("passEmail").innerHTML='<span class="empty">your email</span>';
+}
+["firstName","lastName","email","topic","country","phone"].forEach(id => {
+  $(id).addEventListener("input", updatePass); $(id).addEventListener("change", updatePass);
+});
+
+/* ============================================================================
+   Submit
+   ============================================================================ */
+const form = $("form"), submitBtn = $("submitBtn"), errEl = $("err");
+const fail = m => { errEl.textContent = m; };
+
+$("resetBtn").addEventListener("click", () => {
+  state.slot = null; form.reset(); buildDays(); updatePass(); errEl.textContent = "";
+});
+$("mobileSubmit").addEventListener("click", () => form.dispatchEvent(new Event("submit", {cancelable:true})));
+
+let submitting = false;
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (submitting) return;
+  errEl.textContent = "";
+  if (!state.date) return fail("Pick a day above.");
+  if (!state.slot) return fail("Pick a window.");
+  if (!$("firstName").value.trim() || !$("lastName").value.trim()) return fail("Tell us your name.");
+  const phoneDigits = $("phone").value.replace(/\D/g,"");
+  if (phoneDigits.length < 6) return fail("Enter a valid phone number.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("email").value)) return fail("Enter a valid email.");
+  if (!$("topic").value) return fail("Pick a topic.");
+  if (!$("consent").checked) return fail("Please confirm consent to be called.");
+
+  const phoneE164 = ($("country").value + phoneDigits).replace(/[^\d+]/g,"");
+  const payload = {
+    firstName: $("firstName").value.trim(), lastName: $("lastName").value.trim(),
+    email: $("email").value.trim(), phoneE164,
+    topic: $("topic").value, notes: $("notes").value.trim(),
+    consent: true, consentTimestampUtc: new Date().toISOString(),
+    locale: navigator.language || "en", timeZone: tz,
+    windowStartIso: state.slot.start.toISOString(),
+    windowEndIso:   state.slot.end.toISOString()
+  };
+
+  submitting = true;
+  submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Scheduling…";
+  try {
+    if (MODE === "AGENT") {
+      if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
+      const contactId = await resolveContactXrm(payload);
+      const r = await callActionXrm(payload, contactId);
+      if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
+      bindCustomerLater(payload, contactId);
+      showSuccess(payload);
+    } else if (isSameOriginDataverse()) {
+      // Standalone /WebResources/ on the Dataverse host: cookies authorize us, call Web API directly.
+      await ensureConfigIdFetch();
+      const contactId = await resolveContactFetch(payload);
+      const r = await callActionFetch(payload, contactId);
+      if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
+      showSuccess(payload);
+    } else if (CONFIG.flowTriggerUrl) {
+      const resp = await fetch(CONFIG.flowTriggerUrl, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) throw new Error("Server returned " + resp.status);
+      showSuccess(payload);
+    } else {
+      throw new Error("No backend configured. Open this page from the Dataverse host (e.g. /WebResources/cbk_callback/app.html) or set cbk_FlowTriggerUrl.");
+    }
+  } catch(err){
+    console.error(err);
+    fail(err.message || "Something went wrong scheduling your callback.");
+    submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback";
+    submitting = false;
+  }
+});
+
+function showSuccess(p){
+  const stage = document.createElement("div");
+  stage.className = "success-stage";
+  const card = document.createElement("section");
+  card.className = "card success";
+  const dateStr = dateLongFmt.format(state.date);
+  const timeStr = `${timeFmt.format(state.slot.start)} \u2013 ${timeFmt.format(state.slot.end)}`;
+  card.innerHTML = `
+    <button type="button" class="success-close" aria-label="Close and return to booking">&times;</button>
+    <div class="check"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
+    <h2>You're booked.</h2>
+    <p class="lede">A specialist will call you within the window below. No further action needed.</p>
+    <div class="summary">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><div class="lbl">Calling</div><div class="val">${p.phoneE164}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="lbl">Date</div><div class="val">${dateStr}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="lbl">Window</div><div class="val">${timeStr}</div></div></div>
+    </div>
+    <div class="recap"><b>What happens next:</b><ul style="margin:8px 0 0;padding-left:18px;line-height:1.6">
+      <li>Our system will dial you within your chosen window.</li>
+      <li>If we miss you, we'll try once more.</li>
+    </ul></div>`;
+  stage.appendChild(card);
+  document.body.appendChild(stage);
+  document.querySelector(".mobile-cta").style.display = "none";
+  card.querySelector(".success-close").addEventListener("click", function(){
+    location.reload();
+  });
+}
+
+/* ============================================================================
+   Bootstrap
+   ============================================================================ */
+async function loadTopicOptions(){
+  const sel = $("topic");
+  const apiBase = (CONFIG.orgUrl || window.location.origin).replace(/\/+$/,"") + "/api/data/v9.2";
+  let opts = [];
+  try {
+    if (MODE === "AGENT" && parent.Xrm?.WebApi?.online?.execute){
+      // Use unbound function via fetch on same origin (Xrm has no direct metadata helper); fall through to fetch.
+    }
+    const r = await fetch(apiBase + "/GlobalOptionSetDefinitions(Name='maulabs_whatsitabout')",
+                         { headers: { Accept: "application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" }, credentials: "include" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    opts = (j.Options || []).map(o => ({
+      value: o.Value,
+      label: o.Label?.UserLocalizedLabel?.Label || o.Label?.LocalizedLabels?.[0]?.Label || ("Option " + o.Value)
+    }));
+  } catch(e){
+    console.error("[cbk] loadTopicOptions failed", e);
+  }
+  sel.innerHTML = "";
+  const ph = document.createElement("option"); ph.value=""; ph.disabled=true; ph.selected=true;
+  ph.textContent = opts.length ? "Choose a topic" : "(could not load topics)";
+  sel.appendChild(ph);
+  for (const o of opts){
+    const op = document.createElement("option");
+    op.value = String(o.value);
+    op.textContent = o.label;
+    sel.appendChild(op);
+  }
+  updatePass();
+}
+(async function init(){
+  const footEnv = $("footEnv");
+  try {
+    if (MODE === "AGENT") {
+      await loadConfigFromXrm();
+      footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
+    } else {
+      loadConfigStandalone();
+      footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "";
+    }
+  } catch(e){
+    console.error("[cbk] init failed", e);
+  }
+  await loadTopicOptions();
+  buildDays(); updatePass();
+  tickLiveWait(); setInterval(tickLiveWait, 30000);
+  initWorkstreamPicker();
+})();
+
+/* ============================================================================
+   Workstream picker — replaces the old setup page. Same-origin OData fallback
+   when Xrm isn't present (e.g. /WebResources/... preview).
+   ============================================================================ */
+async function loadWorkstreams(){
+  if (XRM){
+    const r = await XRM.WebApi.retrieveMultipleRecords(
+      "msdyn_proactive_engagement_config",
+      "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc"
+    );
+    return r.entities.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+  }
+  const url = `${window.location.origin}/api/data/v9.2/msdyn_proactive_engagement_configs`
+            + `?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc`;
+  const r = await fetch(url, { credentials:"include",
+    headers:{ Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" } });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  return j.value.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+}
+
+async function saveWorkstream(id){
+  // Locate the env var def + existing value (works through both code paths).
+  if (XRM){
+    const def = await XRM.WebApi.retrieveMultipleRecords(
+      "environmentvariabledefinition",
+      "?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'"
+      + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)"
+    );
+    if (!def.entities.length) throw new Error("env var def not found");
+    const d = def.entities[0];
+    const existing = d.environmentvariabledefinition_environmentvariablevalue;
+    if (existing && existing.length){
+      await XRM.WebApi.updateRecord("environmentvariablevalue", existing[0].environmentvariablevalueid, { value: String(id) });
+    } else {
+      await XRM.WebApi.createRecord("environmentvariablevalue", {
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      });
+    }
+    return;
+  }
+  const base = `${window.location.origin}/api/data/v9.2`;
+  const h = { Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0", "Content-Type":"application/json" };
+  const dResp = await fetch(`${base}/environmentvariabledefinitions`
+      + `?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'`
+      + `&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)`,
+      { credentials:"include", headers:h });
+  if (!dResp.ok) throw new Error("def lookup HTTP " + dResp.status);
+  const dJson = await dResp.json();
+  if (!dJson.value.length) throw new Error("env var def not found");
+  const d = dJson.value[0];
+  const existing = d.environmentvariabledefinition_environmentvariablevalue;
+  if (existing && existing.length){
+    const r = await fetch(`${base}/environmentvariablevalues(${existing[0].environmentvariablevalueid})`,
+      { method:"PATCH", credentials:"include", headers:h, body: JSON.stringify({ value: String(id) }) });
+    if (!r.ok) throw new Error("PATCH HTTP " + r.status);
+  } else {
+    const r = await fetch(`${base}/environmentvariablevalues`, {
+      method:"POST", credentials:"include", headers:h,
+      body: JSON.stringify({
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      })
+    });
+    if (!r.ok) throw new Error("POST HTTP " + r.status);
+  }
+}
+
+async function initWorkstreamPicker(){
+  const pill    = document.querySelector(".ws-pill");
+  const trigger = document.getElementById("wsTrigger");
+  const menu    = document.getElementById("wsMenu");
+  const inner   = document.getElementById("wsMenuInner");
+  const current = document.getElementById("wsCurrent");
+  const status  = document.getElementById("wsStatus");
+  if (!pill || !trigger || !menu) return;
+
+  let items = [];
+  let selectedId = null;
+
+  const setCurrent = name => { current.textContent = name || "Pick one…"; };
+  const open  = () => { pill.dataset.open = "true";  trigger.setAttribute("aria-expanded","true");  menu.hidden = false;
+    setTimeout(() => { (inner.querySelector(".ws-item.is-selected") || inner.querySelector(".ws-item"))?.focus(); }, 0); };
+  const close = () => { pill.dataset.open = "false"; trigger.setAttribute("aria-expanded","false"); menu.hidden = true; };
+  const toggle = () => menu.hidden ? open() : close();
+
+  function renderMenu(){
+    inner.innerHTML = "";
+    if (!items.length){
+      const e = document.createElement("div");
+      e.className = "ws-menu-empty";
+      e.textContent = "No workstreams found in this org.";
+      inner.appendChild(e); return;
+    }
+    for (const w of items){
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ws-item" + (w.id === selectedId ? " is-selected" : "");
+      b.setAttribute("role","option");
+      b.setAttribute("aria-selected", w.id === selectedId ? "true" : "false");
+      b.dataset.id = w.id;
+      const nameSpan = document.createElement("span"); nameSpan.className = "ws-name"; nameSpan.textContent = w.name || "(unnamed)";
+      const tick = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      tick.setAttribute("class","ws-tick"); tick.setAttribute("viewBox","0 0 24 24"); tick.setAttribute("fill","none"); tick.setAttribute("stroke","currentColor"); tick.setAttribute("stroke-width","2.6"); tick.setAttribute("stroke-linecap","round"); tick.setAttribute("stroke-linejoin","round");
+      tick.innerHTML = '<path d="M5 12l5 5L20 7"/>';
+      b.appendChild(nameSpan); b.appendChild(tick);
+      b.addEventListener("click", () => onPick(w));
+      inner.appendChild(b);
+    }
+  }
+
+  async function onPick(w){
+    if (w.id === selectedId){ close(); return; }
+    close();
+    status.className = "ws-status spin"; status.textContent = "·";
+    try {
+      await saveWorkstream(w.id);
+      selectedId = w.id;
+      CONFIG.proactiveEngagementConfigId = w.id;
+      setCurrent(w.name); renderMenu();
+      status.className = "ws-status"; status.textContent = "\u2713";
+      status.title = "Saved";
+      setTimeout(() => { status.textContent = ""; status.title = ""; }, 1800);
+    } catch(e){
+      status.className = "ws-status err"; status.textContent = "!";
+      status.title = "Save failed: " + (e.message || e);
+    }
+  }
+
+  trigger.addEventListener("click", e => { e.stopPropagation(); toggle(); });
+  document.addEventListener("click", e => { if (!pill.contains(e.target)) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !menu.hidden){ close(); trigger.focus(); return; }
+    if (menu.hidden) return;
+    const els = Array.from(inner.querySelectorAll(".ws-item"));
+    const i = els.indexOf(document.activeElement);
+    if (e.key === "ArrowDown"){ e.preventDefault(); (els[i+1] || els[0])?.focus(); }
+    if (e.key === "ArrowUp"){   e.preventDefault(); (els[i-1] || els[els.length-1])?.focus(); }
+  });
+
+  try {
+    items = await loadWorkstreams();
+    if (!items.length){ setCurrent("None configured"); renderMenu(); return; }
+    selectedId = CONFIG.proactiveEngagementConfigId;
+    let match = items.find(w => w.id === selectedId);
+    if (!match && items.length === 1){
+      match = items[0];
+      try { await saveWorkstream(match.id); CONFIG.proactiveEngagementConfigId = match.id; selectedId = match.id; } catch(_){}
+    }
+    setCurrent(match ? match.name : "Pick one…");
+    renderMenu();
+  } catch(e){
+    setCurrent("(load failed)");
+    status.className = "ws-status err"; status.textContent = "!";
+    status.title = "Load failed: " + (e.message || e);
+  }
+}
+</script>
+</body>
+</html>

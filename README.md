@@ -1,181 +1,232 @@
-# Schedule a Callback — D365 Contact Center Proactive Engagement
+# Callback Scheduler for Dynamics 365 Contact Center
 
-A modern, responsive single-page customer-facing site that lets visitors pick a date and one-hour window to be called back. On submit, the page POSTs a JSON payload to a Power Automate HTTP-trigger flow that invokes the official Dynamics 365 Contact Center API **`CCaaS_CreateProactiveVoiceDelivery`** to enqueue an outbound voice call.
-
-> No new Dataverse tables required. The API writes the delivery record into the OOB `msdyn_proactive_delivery` table.
-
-Live preview: open `index.html` in a browser (or host the folder on Vercel / Netlify / Azure Static Web Apps / GitHub Pages — it's pure static).
+A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center (Omnichannel / CCaaS). Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
 
 ---
 
-## 1. What the page does
+## Table of Contents
 
-- Customer picks a **day** (next 14 days) and a **1-hour window** in their local timezone.
-- Customer fills in **first/last name, mobile (with country code), email, topic, optional notes**.
-- Customer **must consent** to be called (mandatory per Microsoft docs — your org is responsible for consent).
-- On submit the page sends a single JSON `POST` to your Power Automate flow.
-
-The boarding-pass-style summary on the right updates live as the user fills the form. On mobile it stacks under the form and a sticky "Schedule my callback" CTA pins to the bottom.
-
-No frameworks, no build step, no dependencies — one HTML file (`index.html`).
-
----
-
-## 2. Configure
-
-Open `index.html` and edit the `CONFIG` block near the bottom of the `<script>`:
-
-```js
-const CONFIG = {
-  apiUrl: "https://prod-XX.westus.logic.azure.com:443/workflows/.../triggers/manual/paths/invoke?...",
-  proactiveEngagementConfigId: "cbbac510-3e66-ef11-a671-6045bd03d9d8",
-  hourStart: 9,
-  hourEnd: 18,
-  daysAhead: 14,
-  minLeadMinutes: 30
-};
-```
-
-Or override at runtime via query string (handy for staging vs. prod):
-```
-https://yoursite.com/?api=https://prod-XX...&cfg=<GUID>
-```
-
-If `apiUrl` is empty the page runs in **DEMO mode**: submission is logged to the browser console and the success screen is shown without hitting any backend.
-
-### Where to find the `ProactiveEngagementConfigId`
-Power Apps → choose your environment → **Tables** → search **Proactive Engagement Configuration** → open the record you want to use → copy its `Id` (GUID). [Source](https://learn.microsoft.com/dynamics365/contact-center/extend/api/ccaas_createproactivevoicedelivery#request-headers).
+1. [What It Does](#what-it-does)
+2. [Prerequisites](#prerequisites)
+3. [Installation](#installation)
+4. [Post-Install Configuration](#post-install-configuration)
+5. [Accessing the Booking Page](#accessing-the-booking-page)
+6. [Creating Workstream Context Variables](#creating-workstream-context-variables)
+7. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
+8. [Topic Options](#topic-options)
+9. [Uninstalling](#uninstalling)
 
 ---
 
-## 3. The Power Automate flow (the only thing you need to build)
+## What It Does
 
-Create an HTTP-trigger Power Automate cloud flow with these steps. The page does the rest.
+The solution deploys a polished booking page as an HTML web resource inside Dynamics 365. Customers can:
 
-### Trigger — **When an HTTP request is received**
-Sample request body schema — paste this into the trigger to auto-generate the schema:
-```json
-{
-  "firstName": "Ada",
-  "lastName": "Lovelace",
-  "email": "ada@example.com",
-  "phoneE164": "+15550123",
-  "countryCode": "+1",
-  "phoneLocal": "5550123",
-  "topic": "Billing question",
-  "notes": "Order #12345",
-  "consent": true,
-  "consentTimestampUtc": "2026-05-13T15:00:00.000Z",
-  "locale": "en-GB",
-  "timeZone": "Europe/London",
-  "ccaas": {
-    "ApiVersion": "1.0",
-    "ProactiveEngagementConfigId": "00000000-0000-0000-0000-000000000000",
-    "DestinationPhoneNumber": "+15550123",
-    "Windows": [{ "Start": "2026-05-14T13:00:00.000Z", "End": "2026-05-14T14:00:00.000Z" }],
-    "InputAttributes": {
-      "type": "callback",
-      "topic": "Billing question",
-      "firstName": "Ada",
-      "lastName": "Lovelace",
-      "notes": "Order #12345",
-      "sourceUrl": "https://your-site/"
-    }
-  }
-}
-```
+- Select a day and time window from a live availability calendar
+- Specify what their call is about (loaded dynamically from your topic choices)
+- Leave optional notes for the agent
 
-### Step 1 — Find or create the Contact (Dataverse connector)
-1. **List rows** on `Contacts`, filter:
-   `emailaddress1 eq '@{triggerBody()?['email']}' or mobilephone eq '@{triggerBody()?['phoneE164']}'`
-2. **Condition**: if `length(outputs('List_rows')?['body/value'])` is `0` → **Add a new row** to `Contacts` with:
-   - `firstname` ← `firstName`
-   - `lastname`  ← `lastName`
-   - `emailaddress1` ← `email`
-   - `mobilephone`   ← `phoneE164`
-   - else use the first existing record.
-3. Set a variable `ContactId` from whichever branch ran.
+Once submitted, the system:
 
-### Step 2 — Call `CCaaS_CreateProactiveVoiceDelivery`
-Use the Dataverse connector action **Perform an unbound action** (or invoke via HTTP with Dataverse — Web API):
+1. Resolves or creates the customer Contact record in Dataverse
+2. Calls `CCaaS_CreateProactiveVoiceDelivery` to schedule the outbound callback
+3. A Power Automate flow writes the booking context (topic, notes) to the Conversation record so agents see it immediately when the call connects
 
-- **Action name**: `CCaaS_CreateProactiveVoiceDelivery`
-- **Parameters (JSON)**:
-```json
-{
-  "ApiVersion": "1.0",
-  "ProactiveEngagementConfigId": "@{triggerBody()?['ccaas']?['ProactiveEngagementConfigId']}",
-  "DestinationPhoneNumber":      "@{triggerBody()?['ccaas']?['DestinationPhoneNumber']}",
-  "ContactId":                   "@{variables('ContactId')}",
-  "Windows":                     "@{triggerBody()?['ccaas']?['Windows']}",
-  "InputAttributes":             "@{triggerBody()?['ccaas']?['InputAttributes']}"
-}
-```
-> Some HTTP/Dataverse tooling requires `Windows` as a **string** of escaped JSON rather than a JSON array. If you see an error, wrap it: `"Windows": "@{string(triggerBody()?['ccaas']?['Windows'])}"`. See the "Important" note in [the docs](https://learn.microsoft.com/dynamics365/contact-center/extend/api/ccaas_createproactivevoicedelivery#windows-object).
+**What agents see** when a callback conversation opens:
 
-### Step 3 — Respond 200
-Return the `DeliveryId` returned by the action so the page can log it (the page currently doesn't read the body — feel free to extend).
-
-### Optional — Send confirmation email
-Use the Office 365 Outlook connector to email `triggerBody()?['email']` a confirmation with the chosen window.
-
----
-
-## 4. Prerequisites in your D365 environment
-
-From [the official docs](https://learn.microsoft.com/dynamics365/contact-center/administer/configure-proactive-engagement):
-1. Dynamics 365 Contact Center licence (or Customer Service with the Contact Center add-on).
-2. Voice channel and an outbound calling number provisioned.
-3. **Proactive Engagement Configuration** record created (Workstream + Outbound Profile + Dial Mode = `Preview`, `Progressive`, or `Copilot`). Copy its `Id`.
-4. The Flow runs as a user with the **Omnichannel agent** or **Omnichannel supervisor** role (required by the API).
-5. Consent — your responsibility. The page already enforces a consent checkbox. Maintain do-not-call lists and quiet hours per local regulation.
-
----
-
-## 5. Where the data ends up
-
-| Artefact | Table | Notes |
+| Label on Form | Column | Type |
 |---|---|---|
-| Customer record | `contact` | Created/looked up by your Flow |
-| Delivery request | `msdyn_proactive_delivery` | Written by the API. Status flows `Pending → InProcess → Complete / Expired / Cancelled / Error` |
-| Per-call attributes | `msdyn_proactive_delivery_attribute` | Each `InputAttributes` key/value is stored here for reporting |
-| Conversation | `conversation` (Omnichannel) | Linked when the call connects |
-
-Reporting reference: [Use proactive engagement tables for reporting](https://learn.microsoft.com/dynamics365/contact-center/extend/proactive-engagement-tables).
+| What is it about? | `cbk_whatsitabout_` | Choice |
+| Anything we should know? | `maulabs_anythingweshouldknow` | Text |
 
 ---
 
-## 6. Brand it
+## Prerequisites
 
-Quick edits in `index.html`:
+Before installing, confirm you have:
 
-| Element | Where |
+- A Dynamics 365 Contact Center (or Customer Service workspace with voice / CCaaS) environment
+- **System Administrator** role in the target environment
+- A configured **Proactive Engagement Configuration** (voice channel already set up in Omnichannel / CCaaS)
+- Power Automate (flows run from the Default environment - no additional license required for D365 customers)
+
+---
+
+## Installation
+
+### Step 1 - Download the solution
+
+1. Go to the [**Releases page**](../../releases/latest) of this repository
+2. Download `CallbackScheduler_x_x_x_x_managed.zip` from the **Assets** section
+
+### Step 2 - Import into Dynamics 365
+
+1. Go to [make.powerapps.com](https://make.powerapps.com) and **select your D365 environment** from the top-right environment picker
+2. In the left navigation, click **Solutions**
+3. Click **Import solution** (top toolbar)
+4. Click **Browse**, select the `.zip` you downloaded, then click **Next**
+5. Review the solution details and click **Import**
+6. Wait for the import to complete (may take 1-3 minutes). A green checkmark confirms success.
+7. Click **Publish all customizations** to activate everything
+
+---
+
+## Post-Install Configuration
+
+After import, the solution creates several environment variables that control the booking page behavior. You must set at least `cbk_ProactiveEngagementConfigId`.
+
+### Find your Proactive Engagement Configuration ID
+
+1. In [Customer Service Admin Center](https://admin.powerplatform.microsoft.com), navigate to **Proactive engagement** (under Voice)
+2. Open your Proactive Engagement Configuration
+3. Copy the GUID from the browser URL - it appears between parentheses, e.g.
+   `.../msdyn_proactive_engagement_configs(xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)`
+
+> **Tip:** If you have only one Proactive Engagement Configuration in your org, the booking page auto-detects and auto-selects it - you can skip this step.
+
+### Set environment variables
+
+1. In **make.powerapps.com > Solutions**, open **Callback Scheduler for D365 Contact Center**
+2. In the left panel, click **Environment variables**
+3. For each variable below, click the three-dot menu > **Edit current value** and enter a value:
+
+| Variable | Type | Description | Default |
+|---|---|---|---|
+| `cbk_ProactiveEngagementConfigId` | Text | GUID of the Proactive Engagement Configuration | *(required)* |
+| `cbk_HourStart` | Number | First bookable hour of the day (24-hour, org timezone) | `9` |
+| `cbk_HourEnd` | Number | Last bookable hour of the day (24-hour, org timezone) | `18` |
+| `cbk_SlotMinutes` | Number | Duration of each callback slot in minutes | `30` |
+| `cbk_DaysAhead` | Number | How many calendar days ahead to show on the calendar | `14` |
+| `cbk_FlowTriggerUrl` | Text | *(Optional)* Power Automate HTTP-trigger URL for external/standalone mode | - |
+
+4. Click **Save** after editing each variable
+
+---
+
+## Accessing the Booking Page
+
+The booking page is deployed as the HTML web resource `cbk_cbk/callback_app.html`. It is designed to run inside the **Dynamics 365 Customer Service Workspace**, embedded as an application tab on the voice session.
+
+### For testing - direct URL
+
+Navigate to:
+
+```
+https://<your-org>.crm.dynamics.com/WebResources/cbk_cbk_callback_app.html
+```
+
+Replace `<your-org>` with your org subdomain (e.g. `contoso`).
+
+> When opened directly in the browser while logged in to Dynamics 365, the page uses your session cookies to authenticate. This is the quickest way to verify the setup.
+
+### Embedding in a voice session (recommended)
+
+To surface the booking page automatically when a voice callback session opens:
+
+1. In **Customer Service Admin Center > Workstreams**, open your voice workstream
+2. Navigate to **Session templates** and open (or create) the session template used for callbacks
+3. Under **Application tabs**, click **Add** and create a new Application Tab Template:
+   - **Name:** e.g. `Callback Booking`
+   - **Page type:** Web Resource
+   - **Web resource name:** `cbk_cbk/callback_app`
+4. Link this tab template to the session template
+5. Save and publish
+
+The booking tab will appear automatically in the tab strip whenever an agent handles a callback session.
+
+---
+
+## Creating Workstream Context Variables
+
+The booking page submits the customer's topic and notes as context attributes inside `CCaaS_CreateProactiveVoiceDelivery`. The included Power Automate flow **"CBK - Populate Conversation columns from context"** reads those attributes and writes them to the Conversation record.
+
+For this mapping to work, the matching context variables must exist in the workstream.
+
+### Steps
+
+1. In **Customer Service Admin Center > Workstreams**, open the workstream used for voice callbacks
+2. Scroll to the **Context variables** section and click **Add**
+3. Create the following two variables exactly as shown:
+
+| Context Variable Name | Type | Description |
+|---|---|---|
+| `cbk_whatsitabout_` | Number | The option-set integer value of the callback topic |
+| `anything_we_should_know` | Text | Free-text notes the customer entered on the booking page |
+
+4. Click **Save**
+
+> **Important:** The variable names must match exactly, including the trailing underscore in `cbk_whatsitabout_`. Dynamics 365 Omnichannel filters out context keys matching certain reserved keywords - the trailing underscore works around this restriction.
+
+---
+
+## Adding Fields to the Active Conversation Form
+
+After installation, add the callback fields to the **Active Conversation** form so agents can see the customer's topic and notes when the call connects.
+
+### Steps
+
+1. Go to [make.powerapps.com](https://make.powerapps.com) > **Solutions** > open the **Default Solution**
+2. Navigate to **Tables > Conversation (`msdyn_ocliveworkitem`) > Forms**
+3. Open the **Active Conversation** form (type: **Main**)
+4. In the form editor, find a suitable section (or create a new one, e.g. **Callback request**)
+5. In the **Table columns** panel on the left, search for and drag these columns onto the form:
+   - **What is it about?** (`cbk_whatsitabout_`) - callback topic as a dropdown
+   - **Anything we should know?** (`maulabs_anythingweshouldknow`) - customer free-text notes
+6. Click **Save** then **Publish**
+
+Example of what agents will see:
+
+| Label | Value |
 |---|---|
-| Brand name | `<div class="brand">…Contoso Care</div>` |
-| Logo dot colours | CSS vars `--accent` and `--accent-2` |
-| Background colours | `body { background: …` |
-| Business hours | `CONFIG.hourStart` / `CONFIG.hourEnd` |
-| Country dropdown | `<select id="country">` |
-| Topic list | `<select id="topic">` |
-| Privacy / Terms links | footer `<a>` tags |
+| What is it about? | Technical support |
+| Anything we should know? | My order has not arrived yet |
 
 ---
 
-## 7. Hosting
+## Topic Options
 
-Pure static — pick whatever you like:
-- Drop `index.html` into an **Azure Storage** static website container.
-- `vercel deploy --prod` from this folder.
-- Push the repo to GitHub and enable **GitHub Pages**.
-- Drag the folder into **Netlify**.
+The "What's it about?" dropdown on the booking page is populated dynamically from the `maulabs_whatsitabout` global Choice (option set). To add, rename, or reorder topics:
 
-No server, no build, no env vars. The only secret (the Power Automate flow URL) is intended to be public — Power Automate HTTP triggers are protected by a SAS in the URL itself; the flow should still validate the request body and apply rate limiting.
+1. In [make.powerapps.com](https://make.powerapps.com) > **Solutions**, open **Callback Scheduler for D365 Contact Center**
+2. Navigate to **Choices** in the left panel
+3. Open **maulabs_whatsitabout**
+4. Add or rename options as needed
+5. Click **Save** and **Publish**
+
+The booking page reflects changes immediately - it reads option labels live from the Dataverse metadata API.
 
 ---
 
-## 8. References
+## Uninstalling
 
-- [Overview of proactive engagement](https://learn.microsoft.com/dynamics365/contact-center/administer/overview-proactive-engagement)
-- [Use `CCaaS_CreateProactiveVoiceDelivery` API](https://learn.microsoft.com/dynamics365/contact-center/extend/api/ccaas_createproactivevoicedelivery)
-- [Use proactive engagement tables for reporting](https://learn.microsoft.com/dynamics365/contact-center/extend/proactive-engagement-tables)
-- [Configure proactive engagement](https://learn.microsoft.com/dynamics365/contact-center/administer/configure-proactive-engagement)
+1. **Remove the callback fields from the Active Conversation form** (reverse of the steps above) and publish the form
+2. In **make.powerapps.com > Solutions**, select **Callback Scheduler for D365 Contact Center**
+3. Click **Delete** and confirm
+
+This removes all solution components: web resource, Power Automate flow, columns, and environment variable definitions.
+
+---
+
+## Architecture Overview
+
+```
+Customer (booking page in browser or D365 app tab)
+        |
+        |  CCaaS_CreateProactiveVoiceDelivery (Dataverse action)
+        v
+D365 CCaaS schedules outbound call within the booked window
+        |
+        |  call connects, Conversation record is created
+        v
+Power Automate flow "CBK - Populate Conversation columns from context"
+        |
+        |  writes topic + notes from workstream context variables
+        v
+Active Conversation form -> agent sees "What is it about?" + notes
+```
+
+---
+
+## Support
+
+For questions or issues, open a GitHub Issue on this repository.

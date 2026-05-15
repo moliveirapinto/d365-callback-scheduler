@@ -117,7 +117,7 @@ After installation, add the callback fields to the **Active Conversation** form 
 
 ### Steps
 
-1. Go to [make.powerapps.com](https://make.powerapps.com) > **Solutions** > open the **Default Solution**
+1. Go to [make.powerapps.com](https://make.powerapps.com)
 2. Navigate to **Tables > Conversation (`msdyn_ocliveworkitem`) > Forms**
 3. Open the **Active Conversation** form (type: **Main**)
 4. In the form editor, find a suitable section (or create a new one, e.g. **Callback request**)

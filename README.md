@@ -1,6 +1,8 @@
 # Callback Scheduler for Dynamics 365 Contact Center
 
-A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center (Omnichannel / CCaaS). Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
+A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center. Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call — with real-time estimated waiting times shown live on the page. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
+
+![Callback Scheduler booking page](img/screenshot.jpeg)
 
 ---
 

@@ -4,7 +4,7 @@ A customer-facing self-service callback booking page for Microsoft Dynamics 365 
 
 <p align="center">
   <img src="img/screenshot.jpeg" width="49%" alt="Callback Scheduler booking page" />
-  <img src="img/screenshot2.jpeg" width="49%" alt="Agent view of scheduled callback in Active Conversation" />
+  <img src="img/sssscreenshot_cbk0.jpeg" width="49%" alt="Agent view of scheduled callback in Active Conversation" />
 </p>
 
 ---

@@ -2,7 +2,10 @@
 
 A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center. Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call — with real-time estimated waiting times shown live on the page. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
 
-![Callback Scheduler booking page](img/screenshot.jpeg)
+<p align="center">
+  <img src="img/screenshot.jpeg" width="49%" alt="Callback Scheduler booking page" />
+  <img src="img/screenshot2.jpeg" width="49%" alt="Agent view of scheduled callback in Active Conversation" />
+</p>
 
 ---
 
@@ -15,7 +18,8 @@ A customer-facing self-service callback booking page for Microsoft Dynamics 365 
 5. [Creating Workstream Context Variables](#creating-workstream-context-variables)
 6. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
 7. [Topic Options](#topic-options)
-8. [Uninstalling](#uninstalling)
+8. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
+9. [Uninstalling](#uninstalling)
 
 ---
 
@@ -152,6 +156,31 @@ The booking page reflects changes immediately - it reads option labels live from
 
 ---
 
+## Smart Visibility - Business Rules
+
+The solution ships with **two business rules** on the **Conversation** table that automatically show or hide the two callback fields based on whether they contain data. This means the form stays clean for every other type of callback your environment already handles.
+
+| Business Rule | Field Watched | Behavior |
+|---|---|---|
+| `What's it about? - Contains data` | `cbk_whatsitabout_` | Shows the field when populated, hides it when empty |
+| `Anything we should know? - Contains data` | `maulabs_anythingweshouldknow` | Shows the field when populated, hides it when empty |
+
+### Why this matters
+
+Dynamics 365 Contact Center already supports several callback patterns out of the box - for example, the system can offer a callback to a customer who has been waiting in queue too long. Those callbacks do **not** carry a topic or customer notes, so the two fields stay empty.
+
+With these business rules in place:
+
+- **Callback scheduled via this booking page** -> fields are populated -> agent sees "What is it about?" and "Anything we should know?" on the Active Conversation form
+- **Standard queue-overflow / IVR callback** (or any other callback type) -> fields are empty -> the rules hide them, and the agent sees the form exactly as they did before installing this solution
+
+The solution detects the callback origin automatically based on the data itself - no extra configuration, no separate form, no impact on existing callback flows.
+
+### Activation
+
+The rules are **activated on import**. After you complete the steps in [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form), the smart show/hide behavior takes effect on the next form load.
+
+---
 ## Uninstalling
 
 1. **Remove the callback fields from the Active Conversation form** (reverse of the steps above) and publish the form

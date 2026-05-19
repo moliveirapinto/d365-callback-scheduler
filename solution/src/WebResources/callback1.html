@@ -141,12 +141,50 @@
   .mode-banner .mdot{width:6px;height:6px;border-radius:50%;background:var(--good)}
   .mode-banner.demo .mdot{background:#e8a23e}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  /* Workstream picker */
+  .ws-pill{position:relative;display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line-2);box-shadow:var(--shadow-sm);padding:6px 12px;border-radius:999px;color:var(--ink);font-family:var(--sans)}
+  .ws-pill .ws-icon{width:14px;height:14px;color:var(--accent);flex-shrink:0}
+  .ws-pill .ws-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+  .ws-trigger{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:transparent;border:0;padding:2px 0;outline:none;border-radius:999px}
+  .ws-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .ws-trigger .ws-current{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ws-trigger .ws-caret{width:10px;height:6px;color:var(--muted);transition:transform .2s ease;flex-shrink:0}
+  .ws-pill[data-open="true"] .ws-caret{transform:rotate(180deg)}
+  .ws-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:280px;max-width:360px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-lg);padding:6px;z-index:200;border-radius:14px;animation:wsmenu .15s ease-out}
+  .ws-menu[hidden]{display:none}
+  .ws-menu-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted);padding:10px 12px 6px}
+  .ws-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;cursor:pointer;font:inherit;font-size:13.5px;color:var(--ink);text-align:left;transition:background .15s ease;border-radius:10px}
+  .ws-item:hover,.ws-item:focus-visible{background:#fff5e6;outline:none}
+  .ws-item.is-selected{background:rgba(255,94,138,.10)}
+  .ws-item.is-selected .ws-name{font-weight:700}
+  .ws-item .ws-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+  .ws-item .ws-tick{width:16px;height:16px;color:var(--accent);opacity:0;flex-shrink:0}
+  .ws-item.is-selected .ws-tick{opacity:1}
+  .ws-menu-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
+  .ws-status{font-size:12px;font-weight:700;min-width:10px;text-align:center;color:var(--good)}
+  .ws-status.err{color:#c43054}
+  .ws-status.spin{color:var(--muted);animation:wsspin 1s linear infinite;display:inline-block}
+  @keyframes wsmenu{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @keyframes wsspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div class="shell">
   <header class="top">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="ws-pill" data-open="false">
+        <svg class="ws-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        <span class="ws-label">Workstream</span>
+        <button type="button" class="ws-trigger" id="wsTrigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="ws-current" id="wsCurrent">Loading...</span>
+          <svg class="ws-caret" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+        </button>
+        <span id="wsStatus" class="ws-status" aria-live="polite"></span>
+        <div class="ws-menu" id="wsMenu" role="listbox" hidden>
+          <div class="ws-menu-head">Pick a workstream</div>
+          <div id="wsMenuInner"></div>
+        </div>
+      </div>
       <div class="pill" title="Average wait if you call us right now"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
     </div>
   </header>
@@ -626,6 +664,163 @@ function showSuccess(p){
    Bootstrap
    ============================================================================ */
 /* ----------------------------------------------------------------------------
+   Workstream picker - replaces the old setup page. Same-origin OData fallback
+   when Xrm isn't present (e.g. /WebResources/... preview).
+   ---------------------------------------------------------------------------- */
+async function loadWorkstreams(){
+  if (XRM){
+    const r = await XRM.WebApi.retrieveMultipleRecords(
+      "msdyn_proactive_engagement_config",
+      "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc"
+    );
+    return r.entities.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+  }
+  const url = `${window.location.origin}/api/data/v9.2/msdyn_proactive_engagement_configs`
+            + `?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc`;
+  const r = await fetch(url, { credentials:"include",
+    headers:{ Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" } });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  return j.value.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+}
+
+async function saveWorkstream(id){
+  if (XRM){
+    const def = await XRM.WebApi.retrieveMultipleRecords(
+      "environmentvariabledefinition",
+      "?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'"
+      + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)"
+    );
+    if (!def.entities.length) throw new Error("env var def not found");
+    const d = def.entities[0];
+    const existing = d.environmentvariabledefinition_environmentvariablevalue;
+    if (existing && existing.length){
+      await XRM.WebApi.updateRecord("environmentvariablevalue", existing[0].environmentvariablevalueid, { value: String(id) });
+    } else {
+      await XRM.WebApi.createRecord("environmentvariablevalue", {
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      });
+    }
+    return;
+  }
+  const base = `${window.location.origin}/api/data/v9.2`;
+  const h = { Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0", "Content-Type":"application/json" };
+  const dResp = await fetch(`${base}/environmentvariabledefinitions`
+      + `?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'`
+      + `&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)`,
+      { credentials:"include", headers:h });
+  if (!dResp.ok) throw new Error("def lookup HTTP " + dResp.status);
+  const dJson = await dResp.json();
+  if (!dJson.value.length) throw new Error("env var def not found");
+  const d = dJson.value[0];
+  const existing = d.environmentvariabledefinition_environmentvariablevalue;
+  if (existing && existing.length){
+    const r = await fetch(`${base}/environmentvariablevalues(${existing[0].environmentvariablevalueid})`,
+      { method:"PATCH", credentials:"include", headers:h, body: JSON.stringify({ value: String(id) }) });
+    if (!r.ok) throw new Error("PATCH HTTP " + r.status);
+  } else {
+    const r = await fetch(`${base}/environmentvariablevalues`, {
+      method:"POST", credentials:"include", headers:h,
+      body: JSON.stringify({
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      })
+    });
+    if (!r.ok) throw new Error("POST HTTP " + r.status);
+  }
+}
+
+async function initWorkstreamPicker(){
+  const pill    = document.querySelector(".ws-pill");
+  const trigger = document.getElementById("wsTrigger");
+  const menu    = document.getElementById("wsMenu");
+  const inner   = document.getElementById("wsMenuInner");
+  const current = document.getElementById("wsCurrent");
+  const status  = document.getElementById("wsStatus");
+  if (!pill || !trigger || !menu) return;
+
+  let items = [];
+  let selectedId = null;
+
+  const setCurrent = name => { current.textContent = name || "Pick one..."; };
+  const open  = () => { pill.dataset.open = "true";  trigger.setAttribute("aria-expanded","true");  menu.hidden = false;
+    setTimeout(() => { (inner.querySelector(".ws-item.is-selected") || inner.querySelector(".ws-item"))?.focus(); }, 0); };
+  const close = () => { pill.dataset.open = "false"; trigger.setAttribute("aria-expanded","false"); menu.hidden = true; };
+  const toggle = () => menu.hidden ? open() : close();
+
+  function renderMenu(){
+    inner.innerHTML = "";
+    if (!items.length){
+      const e = document.createElement("div");
+      e.className = "ws-menu-empty";
+      e.textContent = "No workstreams found in this org.";
+      inner.appendChild(e); return;
+    }
+    for (const w of items){
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ws-item" + (w.id === selectedId ? " is-selected" : "");
+      b.setAttribute("role","option");
+      b.setAttribute("aria-selected", w.id === selectedId ? "true" : "false");
+      b.dataset.id = w.id;
+      const nameSpan = document.createElement("span"); nameSpan.className = "ws-name"; nameSpan.textContent = w.name || "(unnamed)";
+      const tick = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      tick.setAttribute("class","ws-tick"); tick.setAttribute("viewBox","0 0 24 24"); tick.setAttribute("fill","none"); tick.setAttribute("stroke","currentColor"); tick.setAttribute("stroke-width","2.6"); tick.setAttribute("stroke-linecap","round"); tick.setAttribute("stroke-linejoin","round");
+      tick.innerHTML = '<path d="M5 12l5 5L20 7"/>';
+      b.appendChild(nameSpan); b.appendChild(tick);
+      b.addEventListener("click", () => onPick(w));
+      inner.appendChild(b);
+    }
+  }
+
+  async function onPick(w){
+    if (w.id === selectedId){ close(); return; }
+    close();
+    status.className = "ws-status spin"; status.textContent = "\u00B7";
+    try {
+      await saveWorkstream(w.id);
+      selectedId = w.id;
+      CONFIG.proactiveEngagementConfigId = w.id;
+      setCurrent(w.name); renderMenu();
+      status.className = "ws-status"; status.textContent = "\u2713";
+      status.title = "Saved";
+      setTimeout(() => { status.textContent = ""; status.title = ""; }, 1800);
+    } catch(e){
+      status.className = "ws-status err"; status.textContent = "!";
+      status.title = "Save failed: " + (e.message || e);
+    }
+  }
+
+  trigger.addEventListener("click", e => { e.stopPropagation(); toggle(); });
+  document.addEventListener("click", e => { if (!pill.contains(e.target)) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !menu.hidden){ close(); trigger.focus(); return; }
+    if (menu.hidden) return;
+    const els = Array.from(inner.querySelectorAll(".ws-item"));
+    const i = els.indexOf(document.activeElement);
+    if (e.key === "ArrowDown"){ e.preventDefault(); (els[i+1] || els[0])?.focus(); }
+    if (e.key === "ArrowUp"){   e.preventDefault(); (els[i-1] || els[els.length-1])?.focus(); }
+  });
+
+  try {
+    items = await loadWorkstreams();
+    if (!items.length){ setCurrent("None configured"); renderMenu(); return; }
+    selectedId = CONFIG.proactiveEngagementConfigId;
+    let match = items.find(w => w.id === selectedId);
+    if (!match && items.length === 1){
+      match = items[0];
+      try { await saveWorkstream(match.id); CONFIG.proactiveEngagementConfigId = match.id; selectedId = match.id; } catch(_){}
+    }
+    setCurrent(match ? match.name : "Pick one...");
+    renderMenu();
+  } catch(e){
+    setCurrent("(load failed)");
+    status.className = "ws-status err"; status.textContent = "!";
+    status.title = "Load failed: " + (e.message || e);
+  }
+}
+/* ----------------------------------------------------------------------------
    Topic options - pulled live from the maulabs_whatsitabout global Choice.
    ---------------------------------------------------------------------------- */
 async function loadTopicOptions(){
@@ -671,6 +866,7 @@ async function loadTopicOptions(){
   }
   await loadTopicOptions();
   buildDays(); updatePass();
+  initWorkstreamPicker();
   tickLiveWait(); setInterval(tickLiveWait, 30000);
 })();
 </script>

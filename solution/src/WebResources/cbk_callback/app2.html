@@ -1,0 +1,975 @@
+<!doctype html>
+<!--
+  Callback Scheduler — D365 Contact Center
+  ALTERNATE UI (neobrutalist). Functionally identical to app.html.
+  Generated with the typeui.sh `neobrutalism` design skill.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Schedule a callback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* ──────────────────────────────────────────────────────────
+     Neobrutalism tokens (typeui.sh)
+     primary  #FDC800   secondary #432DD7
+     success  #16A34A   warning   #D97706   danger #DC2626
+     surface  #FBFBF9   ink       #1C293C
+     ────────────────────────────────────────────────────────── */
+  :root{
+    --ink:#1C293C; --paper:#FBFBF9; --primary:#FDC800; --secondary:#432DD7;
+    --good:#16A34A; --warn:#D97706; --danger:#DC2626;
+    --pink:#FF6FB5; --mint:#A8F0C6; --sky:#B6E4FF; --lilac:#D7C7FF;
+    --line:#1C293C;
+    --bw:3px;             /* default border weight */
+    --bw-2:5px;           /* heavy border weight   */
+    --shadow:6px 6px 0 0 var(--ink);
+    --shadow-sm:4px 4px 0 0 var(--ink);
+    --shadow-lg:10px 10px 0 0 var(--ink);
+    --sans:"Inter",ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans);color:var(--ink);
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--ink) 1px, transparent 1px),
+      linear-gradient(90deg, var(--ink) 1px, transparent 1px);
+    background-size:32px 32px;
+    background-position:-1px -1px;
+    background-attachment:fixed;
+    background-color:var(--paper);
+    background-blend-mode:normal;
+    min-height:100dvh;
+    /* Soften the grid so text stays readable */
+    background-image:
+      radial-gradient(rgba(28,41,60,.10) 1.2px, transparent 1.4px);
+    background-size:22px 22px;
+  }
+  ::selection{background:var(--primary);color:var(--ink)}
+
+  .shell{max-width:1180px;margin:0 auto;padding:24px 20px 120px}
+
+  /* ── Top bar ─────────────────────────────────────── */
+  .top{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:#fff;border:var(--bw) solid var(--ink);box-shadow:var(--shadow);
+    padding:12px 16px;border-radius:0;margin-bottom:28px;flex-wrap:wrap;
+  }
+  .brand{display:inline-flex;align-items:center;gap:12px;font-weight:900;font-size:18px;letter-spacing:-.01em}
+  .brand .mark{
+    width:38px;height:38px;border:var(--bw) solid var(--ink);background:var(--primary);
+    display:grid;place-items:center;font-family:var(--mono);font-weight:700;
+    box-shadow:var(--shadow-sm);
+  }
+  .brand .mark::before{content:"☎"; font-size:18px}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;background:var(--mint);
+    border:var(--bw) solid var(--ink);padding:6px 12px;border-radius:0;
+    font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    box-shadow:var(--shadow-sm);
+  }
+  .pill .live{width:9px;height:9px;background:var(--ink)}
+  .pill .live{animation:blink 1.4s steps(2,end) infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* ── Hero ────────────────────────────────────────── */
+  .hero{
+    background:var(--primary);border:var(--bw-2) solid var(--ink);
+    box-shadow:var(--shadow-lg);padding:clamp(24px,4vw,44px);margin-bottom:28px;
+    position:relative;overflow:hidden;
+  }
+  .hero::after{
+    content:"";position:absolute;right:-40px;bottom:-40px;width:240px;height:240px;
+    background:var(--secondary);border:var(--bw-2) solid var(--ink);
+    transform:rotate(18deg);z-index:0;
+  }
+  .hero > *{position:relative;z-index:1}
+  .hero .tag{
+    display:inline-block;background:#fff;border:var(--bw) solid var(--ink);
+    padding:6px 12px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;
+    box-shadow:var(--shadow-sm);margin-bottom:14px;
+  }
+  .hero h1{
+    font-family:var(--sans);font-weight:900;font-size:clamp(36px,6vw,68px);
+    line-height:.98;letter-spacing:-.035em;margin:0 0 14px;text-transform:uppercase;
+    max-width:18ch;
+  }
+  .hero h1 mark{background:var(--secondary);color:#fff;padding:0 .15em}
+  .hero .lede{font-size:clamp(15px,1.6vw,17px);max-width:54ch;font-weight:500;line-height:1.5;color:var(--ink)}
+  .hero-meta{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;background:#fff;
+    border:var(--bw) solid var(--ink);padding:8px 12px;font-size:13px;font-weight:700;
+    box-shadow:var(--shadow-sm);text-transform:uppercase;letter-spacing:.04em;
+  }
+  .chip svg{width:14px;height:14px}
+
+  /* ── Layout grid ─────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.9fr);gap:28px;align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+
+  /* ── Card / section ──────────────────────────────── */
+  .block{
+    background:#fff;border:var(--bw) solid var(--ink);box-shadow:var(--shadow);
+    padding:clamp(20px,3vw,32px);border-radius:0;
+  }
+  .block + .block{margin-top:24px}
+  .step{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+  .step .num{
+    width:42px;height:42px;border:var(--bw) solid var(--ink);background:var(--primary);
+    display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:18px;
+    box-shadow:var(--shadow-sm);
+  }
+  .step h2{margin:0;font-weight:900;font-size:clamp(20px,2.2vw,26px);text-transform:uppercase;letter-spacing:-.01em}
+  .step .hint{margin-left:auto;font-family:var(--mono);font-size:12px;background:var(--paper);border:2px solid var(--ink);padding:4px 8px;font-weight:700}
+
+  /* ── Day strip ───────────────────────────────────── */
+  .dates{display:flex;gap:12px;overflow-x:auto;padding:6px 4px 16px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .dates::-webkit-scrollbar{height:8px}
+  .dates::-webkit-scrollbar-track{background:transparent}
+  .dates::-webkit-scrollbar-thumb{background:var(--ink)}
+  .day{
+    flex:0 0 auto;min-width:96px;scroll-snap-align:start;padding:14px 10px 12px;
+    background:#fff;border:var(--bw) solid var(--ink);box-shadow:var(--shadow-sm);
+    text-align:center;cursor:pointer;font:inherit;color:inherit;
+    transition:transform .08s ease, box-shadow .08s ease, background .08s ease;
+  }
+  .day .dow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--ink)}
+  .day .num{font-family:var(--mono);font-weight:700;font-size:30px;line-height:1;margin-top:6px}
+  .day .mon{font-family:var(--mono);font-size:11px;margin-top:4px;text-transform:uppercase;letter-spacing:.08em}
+  .day:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 0 var(--ink)}
+  .day.is-today{background:var(--sky)}
+  .day.is-selected{background:var(--secondary);color:#fff;box-shadow:6px 6px 0 0 var(--ink)}
+  .day.is-selected .dow,.day.is-selected .mon{color:rgba(255,255,255,.85)}
+  .day.is-disabled{opacity:.4;pointer-events:none;background:repeating-linear-gradient(135deg,#fff 0 6px,#eee 6px 12px)}
+
+  /* ── Slot grid ───────────────────────────────────── */
+  .slot-section + .slot-section{margin-top:18px}
+  .slot-label{
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+    margin:0 0 10px;display:inline-block;background:var(--lilac);border:var(--bw) solid var(--ink);
+    padding:4px 10px;box-shadow:var(--shadow-sm);
+  }
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+  .slot{
+    appearance:none;border:var(--bw) solid var(--ink);background:#fff;
+    padding:12px 8px;cursor:pointer;font:inherit;font-weight:700;font-size:14px;
+    box-shadow:var(--shadow-sm);transition:transform .08s ease, box-shadow .08s ease, background .08s ease;
+  }
+  .slot small{display:block;font-family:var(--mono);font-weight:500;font-size:11px;margin-top:3px;color:var(--ink)}
+  .slot:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 0 var(--ink);background:var(--mint)}
+  .slot.is-selected{background:var(--primary);box-shadow:2px 2px 0 0 var(--ink);transform:translate(2px,2px)}
+  .slot[disabled]{opacity:.35;cursor:not-allowed;background:repeating-linear-gradient(135deg,#fff 0 5px,#eee 5px 10px)}
+  .slot[disabled]:hover{transform:none;box-shadow:var(--shadow-sm)}
+
+  /* ── Form ────────────────────────────────────────── */
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:640px){.form{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.full{grid-column:1/-1}
+  .field label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .field input,.field select,.field textarea{
+    width:100%;padding:13px 14px;border:var(--bw) solid var(--ink);background:#fff;
+    font:inherit;color:var(--ink);box-shadow:var(--shadow-sm);border-radius:0;
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .field textarea{min-height:104px;resize:vertical;font-family:var(--sans)}
+  .field input:focus,.field select:focus,.field textarea:focus{
+    outline:none;background:#fffce8;transform:translate(-2px,-2px);box-shadow:6px 6px 0 0 var(--ink);
+  }
+  .phone-row{display:grid;grid-template-columns:130px 1fr;gap:10px}
+  .consent{
+    display:flex;gap:14px;align-items:flex-start;padding:14px 16px;
+    background:var(--mint);border:var(--bw) solid var(--ink);box-shadow:var(--shadow-sm);
+  }
+  .consent input{margin-top:3px;width:18px;height:18px;accent-color:var(--ink)}
+  .consent p{margin:0;font-size:13px;font-weight:600;line-height:1.5}
+
+  .submit-row{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-top:24px;flex-wrap:wrap}
+  .btn{
+    appearance:none;cursor:pointer;border:var(--bw) solid var(--ink);
+    padding:16px 26px;border-radius:0;font:inherit;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+    background:var(--primary);color:var(--ink);box-shadow:var(--shadow);
+    transition:transform .08s ease, box-shadow .08s ease;
+    display:inline-flex;align-items:center;gap:10px;
+  }
+  .btn:hover{transform:translate(-2px,-2px);box-shadow:8px 8px 0 0 var(--ink)}
+  .btn:active{transform:translate(3px,3px);box-shadow:3px 3px 0 0 var(--ink)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:var(--shadow)}
+  .btn.ghost{background:#fff}
+  .btn.cta{background:var(--secondary);color:#fff}
+  .err{color:var(--danger);font-size:13px;font-weight:800;min-height:18px;text-transform:uppercase;letter-spacing:.04em}
+
+  /* ── Receipt panel ───────────────────────────────── */
+  .receipt-aside{position:sticky;top:24px;align-self:start}
+  .receipt{
+    position:relative;background:var(--ink);color:#fff;
+    border:var(--bw-2) solid var(--ink);box-shadow:var(--shadow-lg);
+    padding:24px;overflow:hidden;
+  }
+  .receipt::before{
+    content:"";position:absolute;left:0;right:0;top:74px;height:0;
+    border-top:var(--bw) dashed rgba(255,255,255,.35);
+  }
+  .receipt::after{
+    content:"";position:absolute;left:0;right:0;bottom:60px;height:0;
+    border-top:var(--bw) dashed rgba(255,255,255,.35);
+  }
+  .receipt .stamp{
+    display:inline-block;background:var(--primary);color:var(--ink);
+    border:var(--bw) solid #fff;padding:6px 12px;font-family:var(--mono);font-weight:700;font-size:12px;
+    text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;
+    box-shadow:4px 4px 0 0 #fff;
+  }
+  .receipt h3{font-family:var(--sans);font-weight:900;font-size:24px;text-transform:uppercase;line-height:1.05;margin:6px 0 16px;letter-spacing:-.02em}
+  .when{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0 8px;padding:14px 0}
+  .when .col .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700;margin-bottom:6px}
+  .when .col .v{font-family:var(--mono);font-weight:700;font-size:18px}
+  .receipt dl{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;margin:18px 0 0;padding-top:14px}
+  .receipt dt{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700;margin-bottom:4px}
+  .receipt dd{margin:0;font-weight:700;font-size:15px;word-break:break-word}
+  .receipt .empty{color:rgba(255,255,255,.4);font-weight:400;font-style:italic;font-size:14px}
+  .receipt .barcode{
+    margin-top:18px;height:38px;
+    background:repeating-linear-gradient(90deg,#fff 0 2px,transparent 2px 4px,#fff 4px 5px,transparent 5px 9px,#fff 9px 12px,transparent 12px 14px);
+  }
+
+  /* ── Success stage ───────────────────────────────── */
+  .success-stage{
+    position:fixed;inset:0;display:grid;place-items:center;padding:24px;z-index:100;
+    background:var(--primary);
+    background-image:repeating-linear-gradient(45deg, rgba(28,41,60,.06) 0 14px, transparent 14px 28px);
+  }
+  .success{
+    text-align:left;padding:36px;max-width:540px;width:100%;box-sizing:border-box;
+    background:#fff;border:var(--bw-2) solid var(--ink);box-shadow:var(--shadow-lg);
+    animation:slamIn .35s cubic-bezier(.2,.9,.3,1.4);
+  }
+  @keyframes slamIn{from{opacity:0;transform:translate(-12px,-12px) rotate(-1.5deg)}to{opacity:1;transform:none}}
+  .success .badge{
+    display:inline-flex;align-items:center;gap:10px;background:var(--good);color:#fff;
+    border:var(--bw) solid var(--ink);padding:8px 14px;font-family:var(--mono);font-weight:700;
+    text-transform:uppercase;letter-spacing:.1em;font-size:12px;box-shadow:var(--shadow-sm);margin-bottom:18px;
+  }
+  .success h2{font-family:var(--sans);font-weight:900;font-size:38px;line-height:1;margin:0 0 8px;text-transform:uppercase;letter-spacing:-.02em}
+  .success .lede{margin:0 0 22px;font-size:15px;font-weight:500;line-height:1.5}
+  .success .summary{display:grid;grid-template-columns:1fr;gap:10px;margin:0 0 18px}
+  .success .row{
+    display:flex;align-items:center;gap:14px;background:var(--paper);
+    border:var(--bw) solid var(--ink);padding:14px 16px;box-shadow:var(--shadow-sm);
+  }
+  .success .row .ico{
+    width:42px;height:42px;background:var(--primary);border:var(--bw) solid var(--ink);
+    display:grid;place-items:center;flex-shrink:0;
+  }
+  .success .row .ico svg{width:20px;height:20px}
+  .success .row .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:2px}
+  .success .row .val{font-family:var(--mono);font-size:16px;font-weight:700;line-height:1.25}
+  .success .recap{
+    background:var(--lilac);border:var(--bw) solid var(--ink);padding:14px 16px;font-size:13.5px;
+    box-shadow:var(--shadow-sm);
+  }
+  .success .recap b{font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+
+  /* ── Footer ──────────────────────────────────────── */
+  footer.foot{
+    margin-top:48px;font-family:var(--mono);font-size:12px;display:flex;flex-wrap:wrap;
+    gap:8px 20px;justify-content:space-between;color:var(--ink);font-weight:600;
+  }
+
+  /* ── Mobile sticky CTA ───────────────────────────── */
+  .mobile-cta{
+    display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    background:var(--primary);border-top:var(--bw) solid var(--ink);
+  }
+  .mobile-cta .btn{width:100%;justify-content:center;background:var(--ink);color:#fff}
+  @media (max-width:900px){.mobile-cta{display:block}.receipt-aside{position:static}}
+
+  /* Workstream picker (neobrutalism) */
+  .ws-pill{position:relative;display:inline-flex;align-items:center;gap:10px;background:#fff;border:var(--bw) solid var(--ink);box-shadow:var(--shadow-sm);padding:6px 12px;border-radius:0;color:var(--ink);font-family:var(--sans)}
+  .ws-pill .ws-icon{width:14px;height:14px;color:var(--secondary);flex-shrink:0}
+  .ws-pill .ws-label{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--ink)}
+  .ws-trigger{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;color:var(--ink);background:transparent;border:0;padding:2px 0;outline:none}
+  .ws-trigger:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+  .ws-trigger .ws-current{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ws-trigger .ws-caret{width:10px;height:6px;color:var(--ink);transition:transform .2s ease;flex-shrink:0}
+  .ws-pill[data-open="true"] .ws-caret{transform:rotate(180deg)}
+  .ws-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:280px;max-width:360px;background:#fff;border:var(--bw) solid var(--ink);box-shadow:var(--shadow);padding:6px;z-index:200;border-radius:0;animation:wsmenu .15s ease-out}
+  .ws-menu[hidden]{display:none}
+  .ws-menu-head{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--ink);padding:10px 12px 6px}
+  .ws-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;cursor:pointer;font:inherit;font-size:13.5px;color:var(--ink);text-align:left;transition:background .1s ease;border-radius:0;font-family:var(--sans);font-weight:600}
+  .ws-item:hover,.ws-item:focus-visible{background:var(--primary);outline:none}
+  .ws-item.is-selected{background:var(--mint)}
+  .ws-item.is-selected .ws-name{font-weight:800}
+  .ws-item .ws-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ws-item .ws-tick{width:16px;height:16px;color:var(--ink);opacity:0;flex-shrink:0}
+  .ws-item.is-selected .ws-tick{opacity:1}
+  .ws-menu-empty{padding:14px;color:var(--ink);font-size:13px;text-align:center;font-family:var(--mono)}
+  .ws-status{font-family:var(--mono);font-size:13px;font-weight:800;min-width:10px;text-align:center;color:var(--good)}
+  .ws-status.err{color:var(--danger)}
+  .ws-status.spin{color:var(--ink);animation:wsspin 1s linear infinite;display:inline-block}
+  @keyframes wsmenu{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @keyframes wsspin{to{transform:rotate(360deg)}}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div id="brandName">Callback Scheduler</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="ws-pill" data-open="false">
+        <svg class="ws-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        <span class="ws-label">Workstream</span>
+        <button type="button" class="ws-trigger" id="wsTrigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="ws-current" id="wsCurrent">Loading...</span>
+          <svg class="ws-caret" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+        </button>
+        <span id="wsStatus" class="ws-status" aria-live="polite"></span>
+        <div class="ws-menu" id="wsMenu" role="listbox" hidden>
+          <div class="ws-menu-head">Pick a workstream</div>
+          <div id="wsMenuInner"></div>
+        </div>
+      </div>
+      <div class="pill" title="Average wait if you call us right now">
+        <span class="live" aria-hidden="true"></span>Avg. wait if you call now: <span id="liveWait">…</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <span class="tag">Skip the hold music · we'll call you</span>
+    <h1>Pick a time. <mark>We'll ring you back.</mark></h1>
+    <p class="lede">Tell us when works for you. A specialist will call within your chosen window — no queues, no waiting on hold.</p>
+    <div class="hero-meta">
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg> Free</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg> No account needed</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg> Cancel anytime</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div>
+      <form id="form" novalidate>
+        <section class="block">
+          <div class="step"><div class="num">1</div><h2>Choose a day</h2><span class="hint" id="tzHint"></span></div>
+          <div class="dates" id="dates" role="listbox" aria-label="Available days"></div>
+        </section>
+
+        <section class="block">
+          <div class="step"><div class="num">2</div><h2>Pick a window</h2><span class="hint">Local time</span></div>
+          <div id="slotsHost"></div>
+        </section>
+
+        <section class="block">
+          <div class="step"><div class="num">3</div><h2>Your details</h2></div>
+          <div class="form">
+            <div class="field"><label for="firstName">First name</label><input id="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Last name</label><input id="lastName" autocomplete="family-name" required></div>
+            <div class="field full"><label for="phone">Mobile number</label>
+              <div class="phone-row">
+                <select id="country" aria-label="Country code">
+                  <option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option>
+                  <option value="+351">🇵🇹 +351</option><option value="+34">🇪🇸 +34</option>
+                  <option value="+33">🇫🇷 +33</option><option value="+49">🇩🇪 +49</option>
+                  <option value="+55">🇧🇷 +55</option><option value="+52">🇲🇽 +52</option>
+                  <option value="+91">🇮🇳 +91</option><option value="+61">🇦🇺 +61</option>
+                  <option value="+81">🇯🇵 +81</option><option value="+971">🇦🇪 +971</option>
+                </select>
+                <input id="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="555 0123" required>
+              </div>
+            </div>
+            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+            <div class="field"><label for="topic">What's it about?</label>
+              <select id="topic">
+                <option value="" selected>Choose a topic</option>
+                <option>Billing question</option><option>Order or delivery</option>
+                <option>Technical support</option><option>Account &amp; access</option>
+                <option>Sales enquiry</option><option>Something else</option>
+              </select>
+            </div>
+            <div class="field full"><label for="notes">Anything we should know? <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);font-weight:500;color:var(--ink);opacity:.7">(optional)</span></label>
+              <textarea id="notes" maxlength="500" placeholder="Order #, account email, or a quick description…"></textarea>
+            </div>
+            <div class="field full"><label class="consent">
+              <input type="checkbox" id="consent" required>
+              <p>I agree to be contacted by phone at the number above for the purpose of this callback.</p>
+            </label></div>
+          </div>
+          <div class="submit-row">
+            <span class="err" id="err" role="alert" aria-live="polite"></span>
+            <div style="display:flex;gap:10px">
+              <button type="button" class="btn ghost" id="resetBtn">Reset</button>
+              <button type="submit" class="btn cta" id="submitBtn"><span>Schedule my callback</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+      </form>
+    </div>
+
+    <aside class="receipt-aside">
+      <div class="receipt" id="pass">
+        <div class="stamp">Your callback</div>
+        <h3 id="passTitle">Let's get you sorted</h3>
+        <div class="when">
+          <div class="col"><div class="lbl">Date</div><div class="v" id="passDate"><span class="empty">— pick a day</span></div></div>
+          <div class="col" style="text-align:right"><div class="lbl">Window</div><div class="v" id="passSlot"><span class="empty">— pick a time</span></div></div>
+        </div>
+        <dl>
+          <div><dt>Calling you at</dt><dd id="passPhone"><span class="empty">your number</span></dd></div>
+          <div><dt>About</dt><dd id="passTopic"><span class="empty">your topic</span></dd></div>
+          <div><dt>Confirmation to</dt><dd id="passEmail"><span class="empty">your email</span></dd></div>
+          <div><dt>Time zone</dt><dd id="passTz">—</dd></div>
+        </dl>
+        <div class="barcode" aria-hidden="true"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="foot" style="justify-content:center;text-align:center">
+    <div>© <span id="year"></span> · Powered by Dynamics 365 Contact Center</div>
+    <div id="footEnv"></div>
+  </footer>
+</div>
+
+<div class="mobile-cta"><button class="btn" id="mobileSubmit" type="button">Schedule my callback</button></div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   Mode detection — AGENT (inside D365) or CUSTOMER (standalone + flow URL)
+   ============================================================================ */
+function getXrm(){
+  try { if (window.parent && window.parent !== window && window.parent.Xrm) return window.parent.Xrm; } catch(e){}
+  try { if (window.Xrm) return window.Xrm; } catch(e){}
+  return null;
+}
+const XRM = getXrm();
+const MODE = XRM ? "AGENT" : "CUSTOMER";
+
+const DEFAULTS = { hourStart: 9, hourEnd: 18, slotMinutes: 30, daysAhead: 14 };
+let CONFIG = { ...DEFAULTS, proactiveEngagementConfigId: null, flowTriggerUrl: null, orgUrl: null };
+
+async function loadConfigFromXrm(){
+  const ctx = XRM.Utility.getGlobalContext();
+  CONFIG.orgUrl = ctx.getClientUrl();
+  const r = await XRM.WebApi.retrieveMultipleRecords(
+    "environmentvariabledefinition",
+    "?$select=schemaname,defaultvalue,type" +
+    "&$filter=startswith(schemaname,'cbk_')" +
+    "&$expand=environmentvariabledefinition_environmentvariablevalue($select=value)"
+  );
+  const map = {};
+  for (const d of r.entities) {
+    const v = d["environmentvariabledefinition_environmentvariablevalue"];
+    map[d.schemaname] = (v && v.length) ? v[0].value : d.defaultvalue;
+  }
+  const num = (k, fallback) => { const x = parseInt(map[k], 10); return isFinite(x) ? x : fallback; };
+  CONFIG.proactiveEngagementConfigId = (map["cbk_ProactiveEngagementConfigId"] || "").trim() || null;
+  CONFIG.flowTriggerUrl              = (map["cbk_FlowTriggerUrl"] || "").trim() || null;
+  CONFIG.hourStart                   = num("cbk_HourStart",  DEFAULTS.hourStart);
+  CONFIG.hourEnd                     = num("cbk_HourEnd",    DEFAULTS.hourEnd);
+  CONFIG.slotMinutes                 = num("cbk_SlotMinutes",DEFAULTS.slotMinutes);
+  CONFIG.daysAhead                   = num("cbk_DaysAhead",  DEFAULTS.daysAhead);
+  if (!CONFIG.proactiveEngagementConfigId) {
+    try {
+      const c = await XRM.WebApi.retrieveMultipleRecords(
+        "msdyn_proactive_engagement_config",
+        "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=1"
+      );
+      if (c.entities.length) {
+        CONFIG.proactiveEngagementConfigId = c.entities[0].msdyn_proactive_engagement_configid;
+        console.info("[cbk] auto-discovered proactive engagement config:", c.entities[0].msdyn_name);
+      }
+    } catch(e){ console.warn("[cbk] proactive config auto-discovery failed", e); }
+  }
+}
+
+function loadConfigStandalone(){
+  const url = new URL(window.location.href);
+  CONFIG.flowTriggerUrl              = url.searchParams.get("api") || null;
+  CONFIG.proactiveEngagementConfigId = url.searchParams.get("cfg") || null;
+  CONFIG.hourStart                   = parseInt(url.searchParams.get("h0"), 10) || DEFAULTS.hourStart;
+  CONFIG.hourEnd                     = parseInt(url.searchParams.get("h1"), 10) || DEFAULTS.hourEnd;
+  CONFIG.slotMinutes                 = parseInt(url.searchParams.get("slot"), 10) || DEFAULTS.slotMinutes;
+  CONFIG.daysAhead                   = parseInt(url.searchParams.get("days"), 10) || DEFAULTS.daysAhead;
+}
+
+async function resolveContactXrm(p){
+  const esc = s => String(s).replace(/'/g, "''");
+  const clauses = [];
+  if (p.email)     clauses.push(`emailaddress1 eq '${esc(p.email)}'`);
+  if (p.phoneE164) {
+    clauses.push(`mobilephone eq '${esc(p.phoneE164)}'`);
+    clauses.push(`telephone1 eq '${esc(p.phoneE164)}'`);
+  }
+  if (clauses.length) {
+    const q = "?$select=contactid,emailaddress1,mobilephone,telephone1,modifiedon,fullname"
+            + "&$filter=" + clauses.join(" or ") + "&$top=25";
+    const r = await XRM.WebApi.retrieveMultipleRecords("contact", q);
+    if (r.entities.length) {
+      const score = c => {
+        const eHit = p.email && c.emailaddress1 && c.emailaddress1.toLowerCase() === p.email.toLowerCase();
+        const pHit = p.phoneE164 && (c.mobilephone === p.phoneE164 || c.telephone1 === p.phoneE164);
+        return (eHit && pHit) ? 100 : pHit ? 50 : eHit ? 25 : 0;
+      };
+      r.entities.sort((a,b) => score(b)-score(a)
+        || String(b.modifiedon||"").localeCompare(String(a.modifiedon||"")));
+      return r.entities[0].contactid;
+    }
+  }
+  const created = await XRM.WebApi.createRecord("contact", {
+    firstname: p.firstName, lastname: p.lastName,
+    emailaddress1: p.email, mobilephone: p.phoneE164, telephone1: p.phoneE164
+  });
+  return created.id;
+}
+
+function buildActionRequest(p, contactId){
+  const inputAttrs = {
+    type: "callback", topic: p.topic, firstName: p.firstName, lastName: p.lastName,
+    notes: p.notes || "", consentTimestampUtc: p.consentTimestampUtc,
+    customerEmail: p.email, customerLocale: p.locale, customerTimeZone: p.timeZone,
+    sourceUrl: window.location.href
+  };
+  return {
+    ApiVersion: "1.0",
+    ProactiveEngagementConfigId: CONFIG.proactiveEngagementConfigId,
+    DestinationPhoneNumber: p.phoneE164,
+    ContactId: contactId,
+    Windows:         JSON.stringify([{ Start: p.windowStartIso, End: p.windowEndIso }]),
+    InputAttributes: JSON.stringify(inputAttrs),
+    getMetadata: () => ({
+      boundParameter: null, operationType: 0,
+      operationName: "CCaaS_CreateProactiveVoiceDelivery",
+      parameterTypes: {
+        ApiVersion:                  { typeName: "Edm.String", structuralProperty: 1 },
+        ProactiveEngagementConfigId: { typeName: "Edm.String", structuralProperty: 1 },
+        DestinationPhoneNumber:      { typeName: "Edm.String", structuralProperty: 1 },
+        ContactId:                   { typeName: "Edm.String", structuralProperty: 1 },
+        Windows:                     { typeName: "Edm.String", structuralProperty: 1 },
+        InputAttributes:             { typeName: "Edm.String", structuralProperty: 1 }
+      }
+    })
+  };
+}
+
+async function callActionXrm(p, contactId){
+  const req = buildActionRequest(p, contactId);
+  const r = await XRM.WebApi.execute(req);
+  if (!r.ok) throw new Error("Action returned " + r.status);
+  return r.json();
+}
+
+function bindCustomerLater(p, contactId){
+  const sinceIso = new Date(Date.now() - 60000).toISOString();
+  const phoneTitle = `${p.phoneE164}: Proactive Outbound`;
+  const deadline = Math.min(new Date(p.windowEndIso).getTime() + 120000, Date.now() + 30*60000);
+  const seen = Object.create(null);
+  const tick = async () => {
+    if (Date.now() > deadline) return;
+    try {
+      const q = "?$select=msdyn_ocliveworkitemid,_msdyn_customer_value,createdon"
+              + "&$filter=" + encodeURIComponent(`msdyn_title eq '${phoneTitle}' and createdon ge ${sinceIso}`)
+              + "&$orderby=createdon desc&$top=20";
+      const r = await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", q);
+      for (const c of r.entities) {
+        const cid = c.msdyn_ocliveworkitemid;
+        if (seen[cid]) continue;
+        if (c["_msdyn_customer_value"]) { seen[cid] = true; continue; }
+        try {
+          await XRM.WebApi.updateRecord("msdyn_ocliveworkitem", cid, {
+            "msdyn_customer_msdyn_ocliveworkitem_contact@odata.bind": `/contacts(${contactId})`
+          });
+          seen[cid] = true;
+          console.info("[cbk] bound customer onto conversation", cid);
+        } catch(e){ console.warn("[cbk] bind PATCH failed for", cid, e); }
+      }
+    } catch(e){ console.warn("[cbk] bind poll failed", e); }
+    setTimeout(tick, 8000);
+  };
+  setTimeout(tick, 4000);
+}
+
+async function tickLiveWait(){
+  const el = document.getElementById("liveWait");
+  if (!el) return;
+  if (MODE !== "AGENT") { el.textContent = "—"; return; }
+  try {
+    const since = new Date(Date.now() - 24*3600*1000).toISOString();
+    const q = "?$select=msdyn_conversationfirstwaittimeinseconds"
+            + "&$filter=" + encodeURIComponent(`createdon ge ${since} and msdyn_conversationfirstwaittimeinseconds ne null`)
+            + "&$top=200";
+    const r = await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", q);
+    const vals = r.entities.map(x => x.msdyn_conversationfirstwaittimeinseconds).filter(v => v != null && v >= 0);
+    if (!vals.length) { el.textContent = "no recent calls"; return; }
+    const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+    el.textContent = avg < 60 ? Math.round(avg) + " sec" : (avg/60).toFixed(1) + " min";
+    el.title = `D365 live: avg of ${vals.length} call(s) in last 24h`;
+  } catch(e){ el.textContent = "—"; }
+}
+
+const $ = id => document.getElementById(id);
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time";
+$("tzHint").textContent = tz; $("passTz").textContent = tz; $("year").textContent = new Date().getFullYear();
+
+const state = { date: null, slot: null };
+const daysHost = $("dates"), slotsHost = $("slotsHost");
+const dowFmt = new Intl.DateTimeFormat(undefined,{weekday:"short"});
+const monFmt = new Intl.DateTimeFormat(undefined,{month:"short"});
+const timeFmt = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
+const dateLongFmt = new Intl.DateTimeFormat(undefined,{weekday:"long",month:"long",day:"numeric"});
+
+const startOfLocalDay = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+
+function dayHasAvailableSlot(d){
+  const minTime = new Date();
+  const stepMs = CONFIG.slotMinutes*60000;
+  const dayStart = new Date(d); dayStart.setHours(CONFIG.hourStart,0,0,0);
+  const dayEnd   = new Date(d); dayEnd.setHours(CONFIG.hourEnd,0,0,0);
+  for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += stepMs) {
+    if (new Date(t + stepMs) > minTime) return true;
+  }
+  return false;
+}
+function buildDays(){
+  daysHost.innerHTML = "";
+  const today = startOfLocalDay(new Date());
+  let firstAvail = null;
+  for (let i=0; i<CONFIG.daysAhead; i++){
+    const d = new Date(today); d.setDate(today.getDate()+i);
+    const el = document.createElement("button");
+    el.type = "button"; el.className = "day" + (i===0 ? " is-today" : "");
+    el.innerHTML = `<div class="dow">${dowFmt.format(d)}</div><div class="num">${d.getDate()}</div><div class="mon">${monFmt.format(d)}</div>`;
+    if (!dayHasAvailableSlot(d)) el.classList.add("is-disabled");
+    else if (!firstAvail) firstAvail = {d, el};
+    el.addEventListener("click", () => selectDay(d, el));
+    daysHost.appendChild(el);
+  }
+  if (firstAvail) selectDay(firstAvail.d, firstAvail.el);
+}
+function selectDay(d, el){
+  state.date = startOfLocalDay(d); state.slot = null;
+  for (const x of daysHost.children) x.classList.remove("is-selected");
+  el.classList.add("is-selected"); buildSlots(); updatePass();
+}
+function buildSlots(){
+  slotsHost.innerHTML = "";
+  const minTime = new Date();
+  const stepMs = CONFIG.slotMinutes*60000;
+  const groups = [{label:"Morning",from:CONFIG.hourStart,to:12},{label:"Afternoon",from:12,to:CONFIG.hourEnd}];
+  for (const g of groups){
+    const section = document.createElement("div"); section.className = "slot-section";
+    const label = document.createElement("div"); label.className = "slot-label"; label.textContent = g.label; section.appendChild(label);
+    const grid = document.createElement("div"); grid.className = "slots";
+    const a = new Date(state.date); a.setHours(g.from,0,0,0);
+    const b = new Date(state.date); b.setHours(g.to,0,0,0);
+    for (let t = a.getTime(); t < b.getTime(); t += stepMs){
+      const start = new Date(t), end = new Date(t+stepMs);
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "slot";
+      btn.innerHTML = `${timeFmt.format(start)}<small>to ${timeFmt.format(end)}</small>`;
+      if (end <= minTime) btn.disabled = true;
+      else btn.addEventListener("click", () => {
+        state.slot = {start,end};
+        for (const s of slotsHost.querySelectorAll(".slot")) s.classList.remove("is-selected");
+        btn.classList.add("is-selected"); updatePass();
+      });
+      grid.appendChild(btn);
+    }
+    section.appendChild(grid); slotsHost.appendChild(section);
+  }
+}
+function updatePass(){
+  $("passDate").textContent = state.date ? dateLongFmt.format(state.date) : ""; if (!state.date) $("passDate").innerHTML='<span class="empty">— pick a day</span>';
+  $("passSlot").textContent = state.slot ? `${timeFmt.format(state.slot.start)} – ${timeFmt.format(state.slot.end)}` : ""; if (!state.slot) $("passSlot").innerHTML='<span class="empty">— pick a time</span>';
+  const ph = ($("country").value + $("phone").value.replace(/\D/g,""));
+  $("passPhone").textContent = ph.length>2 ? ph : ""; if (ph.length<=2) $("passPhone").innerHTML='<span class="empty">your number</span>';
+  $("passTopic").textContent = $("topic").value || ""; if (!$("topic").value) $("passTopic").innerHTML='<span class="empty">your topic</span>';
+  $("passEmail").textContent = $("email").value || ""; if (!$("email").value) $("passEmail").innerHTML='<span class="empty">your email</span>';
+}
+["firstName","lastName","email","topic","country","phone"].forEach(id => {
+  $(id).addEventListener("input", updatePass); $(id).addEventListener("change", updatePass);
+});
+
+const form = $("form"), submitBtn = $("submitBtn"), errEl = $("err");
+const fail = m => { errEl.textContent = m; };
+
+$("resetBtn").addEventListener("click", () => {
+  state.slot = null; form.reset(); buildDays(); updatePass(); errEl.textContent = "";
+});
+$("mobileSubmit").addEventListener("click", () => form.dispatchEvent(new Event("submit", {cancelable:true})));
+
+let submitting = false;
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (submitting) return;
+  errEl.textContent = "";
+  if (!state.date) return fail("Pick a day above.");
+  if (!state.slot) return fail("Pick a window.");
+  if (!$("firstName").value.trim() || !$("lastName").value.trim()) return fail("Tell us your name.");
+  const phoneDigits = $("phone").value.replace(/\D/g,"");
+  if (phoneDigits.length < 6) return fail("Enter a valid phone number.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("email").value)) return fail("Enter a valid email.");
+  if (!$("consent").checked) return fail("Please confirm consent to be called.");
+
+  const phoneE164 = ($("country").value + phoneDigits).replace(/[^\d+]/g,"");
+  const payload = {
+    firstName: $("firstName").value.trim(), lastName: $("lastName").value.trim(),
+    email: $("email").value.trim(), phoneE164,
+    topic: $("topic").value, notes: $("notes").value.trim(),
+    consent: true, consentTimestampUtc: new Date().toISOString(),
+    locale: navigator.language || "en", timeZone: tz,
+    windowStartIso: state.slot.start.toISOString(),
+    windowEndIso:   state.slot.end.toISOString()
+  };
+
+  submitting = true;
+  submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Scheduling…";
+  try {
+    if (MODE === "AGENT") {
+      if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
+      const contactId = await resolveContactXrm(payload);
+      const r = await callActionXrm(payload, contactId);
+      if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
+      bindCustomerLater(payload, contactId);
+      showSuccess(payload);
+    } else if (CONFIG.flowTriggerUrl) {
+      const resp = await fetch(CONFIG.flowTriggerUrl, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) throw new Error("Server returned " + resp.status);
+      showSuccess(payload);
+    } else {
+      throw new Error("No backend configured. Set cbk_FlowTriggerUrl env var (or open this page from inside D365).");
+    }
+  } catch(err){
+    console.error(err);
+    fail(err.message || "Something went wrong scheduling your callback.");
+    submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback";
+    submitting = false;
+  }
+});
+
+function showSuccess(p){
+  const stage = document.createElement("div");
+  stage.className = "success-stage";
+  const card = document.createElement("section");
+  card.className = "success";
+  const dateStr = dateLongFmt.format(state.date);
+  const timeStr = `${timeFmt.format(state.slot.start)} \u2013 ${timeFmt.format(state.slot.end)}`;
+  card.innerHTML = `
+    <div class="badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+      Booked
+    </div>
+    <h2>You're booked.</h2>
+    <p class="lede">A specialist will call you within the window below. No further action needed.</p>
+    <div class="summary">
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><div class="lbl">Calling</div><div class="val">${p.phoneE164}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="lbl">Date</div><div class="val">${dateStr}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="lbl">Window</div><div class="val">${timeStr}</div></div></div>
+    </div>
+    <div class="recap"><b>What happens next:</b><ul style="margin:8px 0 0;padding-left:18px;line-height:1.6">
+      <li>Our system will dial you within your chosen window.</li>
+      <li>If we miss you, we'll try once more.</li>
+    </ul></div>`;
+  stage.appendChild(card);
+  document.body.appendChild(stage);
+  document.querySelector(".mobile-cta").style.display = "none";
+}
+
+(async function init(){
+  const footEnv = $("footEnv");
+  try {
+    if (MODE === "AGENT") {
+      await loadConfigFromXrm();
+      footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
+    } else {
+      loadConfigStandalone();
+      footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "";
+    }
+  } catch(e){
+    console.error("[cbk] init failed", e);
+  }
+  buildDays(); updatePass();
+  tickLiveWait(); setInterval(tickLiveWait, 30000);
+    initWorkstreamPicker();
+  })();
+
+/* ============================================================================
+   Workstream picker — replaces the old setup page. Same-origin OData fallback
+   when Xrm isn't present (e.g. /WebResources/... preview).
+   ============================================================================ */
+async function loadWorkstreams(){
+  if (XRM){
+    const r = await XRM.WebApi.retrieveMultipleRecords(
+      "msdyn_proactive_engagement_config",
+      "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc"
+    );
+    return r.entities.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+  }
+  const url = `${window.location.origin}/api/data/v9.2/msdyn_proactive_engagement_configs`
+            + `?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc`;
+  const r = await fetch(url, { credentials:"include",
+    headers:{ Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" } });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  return j.value.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+}
+
+async function saveWorkstream(id){
+  // Locate the env var def + existing value (works through both code paths).
+  if (XRM){
+    const def = await XRM.WebApi.retrieveMultipleRecords(
+      "environmentvariabledefinition",
+      "?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'"
+      + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)"
+    );
+    if (!def.entities.length) throw new Error("env var def not found");
+    const d = def.entities[0];
+    const existing = d.environmentvariabledefinition_environmentvariablevalue;
+    if (existing && existing.length){
+      await XRM.WebApi.updateRecord("environmentvariablevalue", existing[0].environmentvariablevalueid, { value: String(id) });
+    } else {
+      await XRM.WebApi.createRecord("environmentvariablevalue", {
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      });
+    }
+    return;
+  }
+  const base = `${window.location.origin}/api/data/v9.2`;
+  const h = { Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0", "Content-Type":"application/json" };
+  const dResp = await fetch(`${base}/environmentvariabledefinitions`
+      + `?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'`
+      + `&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)`,
+      { credentials:"include", headers:h });
+  if (!dResp.ok) throw new Error("def lookup HTTP " + dResp.status);
+  const dJson = await dResp.json();
+  if (!dJson.value.length) throw new Error("env var def not found");
+  const d = dJson.value[0];
+  const existing = d.environmentvariabledefinition_environmentvariablevalue;
+  if (existing && existing.length){
+    const r = await fetch(`${base}/environmentvariablevalues(${existing[0].environmentvariablevalueid})`,
+      { method:"PATCH", credentials:"include", headers:h, body: JSON.stringify({ value: String(id) }) });
+    if (!r.ok) throw new Error("PATCH HTTP " + r.status);
+  } else {
+    const r = await fetch(`${base}/environmentvariablevalues`, {
+      method:"POST", credentials:"include", headers:h,
+      body: JSON.stringify({
+        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
+        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
+      })
+    });
+    if (!r.ok) throw new Error("POST HTTP " + r.status);
+  }
+}
+
+async function initWorkstreamPicker(){
+  const pill    = document.querySelector(".ws-pill");
+  const trigger = document.getElementById("wsTrigger");
+  const menu    = document.getElementById("wsMenu");
+  const inner   = document.getElementById("wsMenuInner");
+  const current = document.getElementById("wsCurrent");
+  const status  = document.getElementById("wsStatus");
+  if (!pill || !trigger || !menu) return;
+
+  let items = [];
+  let selectedId = null;
+
+  const setCurrent = name => { current.textContent = name || "Pick one…"; };
+  const open  = () => { pill.dataset.open = "true";  trigger.setAttribute("aria-expanded","true");  menu.hidden = false;
+    setTimeout(() => { (inner.querySelector(".ws-item.is-selected") || inner.querySelector(".ws-item"))?.focus(); }, 0); };
+  const close = () => { pill.dataset.open = "false"; trigger.setAttribute("aria-expanded","false"); menu.hidden = true; };
+  const toggle = () => menu.hidden ? open() : close();
+
+  function renderMenu(){
+    inner.innerHTML = "";
+    if (!items.length){
+      const e = document.createElement("div");
+      e.className = "ws-menu-empty";
+      e.textContent = "No workstreams found in this org.";
+      inner.appendChild(e); return;
+    }
+    for (const w of items){
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ws-item" + (w.id === selectedId ? " is-selected" : "");
+      b.setAttribute("role","option");
+      b.setAttribute("aria-selected", w.id === selectedId ? "true" : "false");
+      b.dataset.id = w.id;
+      const nameSpan = document.createElement("span"); nameSpan.className = "ws-name"; nameSpan.textContent = w.name || "(unnamed)";
+      const tick = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      tick.setAttribute("class","ws-tick"); tick.setAttribute("viewBox","0 0 24 24"); tick.setAttribute("fill","none"); tick.setAttribute("stroke","currentColor"); tick.setAttribute("stroke-width","2.6"); tick.setAttribute("stroke-linecap","round"); tick.setAttribute("stroke-linejoin","round");
+      tick.innerHTML = '<path d="M5 12l5 5L20 7"/>';
+      b.appendChild(nameSpan); b.appendChild(tick);
+      b.addEventListener("click", () => onPick(w));
+      inner.appendChild(b);
+    }
+  }
+
+  async function onPick(w){
+    if (w.id === selectedId){ close(); return; }
+    close();
+    status.className = "ws-status spin"; status.textContent = "·";
+    try {
+      await saveWorkstream(w.id);
+      selectedId = w.id;
+      CONFIG.proactiveEngagementConfigId = w.id;
+      setCurrent(w.name); renderMenu();
+      status.className = "ws-status"; status.textContent = "\u2713";
+      status.title = "Saved";
+      setTimeout(() => { status.textContent = ""; status.title = ""; }, 1800);
+    } catch(e){
+      status.className = "ws-status err"; status.textContent = "!";
+      status.title = "Save failed: " + (e.message || e);
+    }
+  }
+
+  trigger.addEventListener("click", e => { e.stopPropagation(); toggle(); });
+  document.addEventListener("click", e => { if (!pill.contains(e.target)) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !menu.hidden){ close(); trigger.focus(); return; }
+    if (menu.hidden) return;
+    const els = Array.from(inner.querySelectorAll(".ws-item"));
+    const i = els.indexOf(document.activeElement);
+    if (e.key === "ArrowDown"){ e.preventDefault(); (els[i+1] || els[0])?.focus(); }
+    if (e.key === "ArrowUp"){   e.preventDefault(); (els[i-1] || els[els.length-1])?.focus(); }
+  });
+
+  try {
+    items = await loadWorkstreams();
+    if (!items.length){ setCurrent("None configured"); renderMenu(); return; }
+    selectedId = CONFIG.proactiveEngagementConfigId;
+    let match = items.find(w => w.id === selectedId);
+    if (!match && items.length === 1){
+      match = items[0];
+      try { await saveWorkstream(match.id); CONFIG.proactiveEngagementConfigId = match.id; selectedId = match.id; } catch(_){}
+    }
+    setCurrent(match ? match.name : "Pick one…");
+    renderMenu();
+  } catch(e){
+    setCurrent("(load failed)");
+    status.className = "ws-status err"; status.textContent = "!";
+    status.title = "Load failed: " + (e.message || e);
+  }
+}
+
+</script>
+</body>
+</html>

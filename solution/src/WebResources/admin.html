@@ -148,12 +148,11 @@
 <div class="shell">
 
   <header class="top">
-    <div class="brand"><div class="dot"></div>Callback Scheduler &middot; Admin</div>
-    <div class="env-chip" id="envChip"><span class="live"></span><span id="envText">Loading...</span></div>
+    <h1 class="title" style="margin:0">Configure the scheduler</h1>
+    <div class="env-chip" id="envChip" title="Average first wait time across the last 24 hours of live conversations"><span class="live"></span><span>Avg. wait if you call now: <span id="envText">…</span></span></div>
   </header>
 
-  <h1 class="title">Configure the scheduler</h1>
-  <p class="lede">Settings here drive every callback page (callback1-5). Operating hours are read live from the queue attached to the selected workstream. The dashboard below lists every proactive delivery in your environment.</p>
+  <p class="lede">These settings shape the experience on every public callback page &mdash; time-slot length, booking window, daily capacity and operating hours all flow through here. Adjust once, and customers see the change on their next visit.</p>
 
   <div id="nag"></div>
 
@@ -297,7 +296,28 @@ if (!XRM){
 
 const ORG = XRM ? XRM.Utility.getGlobalContext().getClientUrl() : window.location.origin;
 const BASE = ORG.replace(/\/+$/,"") + "/api/data/v9.2";
-document.getElementById("envText").textContent = ORG;
+
+/* Live average wait — mirrors the customer-facing pages. Reads the last 24h of
+   msdyn_ocliveworkitem first-wait values and shows the mean in the env chip. */
+async function tickLiveWait(){
+  const el = document.getElementById("envText");
+  if (!el) return;
+  try {
+    const since = new Date(Date.now() - 24*3600*1000).toISOString();
+    const q = "?$select=msdyn_conversationfirstwaittimeinseconds"
+            + "&$filter=" + encodeURIComponent(`createdon ge ${since} and msdyn_conversationfirstwaittimeinseconds ne null`)
+            + "&$top=200";
+    const r = XRM
+      ? await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", q)
+      : await (await fetch(BASE + "/msdyn_ocliveworkitems" + q, { credentials: "include", headers: { Accept: "application/json" } })).json().then(j => ({ entities: j.value || [] }));
+    const vals = (r.entities || []).map(x => x.msdyn_conversationfirstwaittimeinseconds).filter(v => v != null && v >= 0);
+    if (!vals.length) { el.textContent = "no recent calls"; return; }
+    const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+    el.textContent = avg < 60 ? Math.round(avg) + " sec" : (avg/60).toFixed(1) + " min";
+  } catch(e){ el.textContent = "—"; }
+}
+tickLiveWait();
+setInterval(tickLiveWait, 30000);
 
 const $ = id => document.getElementById(id);
 

@@ -922,7 +922,7 @@ async function _apiGet(rel){
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
-function _hhmmToMin(s){ const p = String(s||"").split(":"); return (+p[0]||0)*60 + (+p[1]||0); }
+function _hhmmToMin(s){ s = String(s||""); if (s.indexOf("T")>=0){ const d=new Date(s); if(!isNaN(d)) return d.getUTCHours()*60+d.getUTCMinutes(); } const p=s.split(":"); return (+p[0]||0)*60+(+p[1]||0); }
 function _bucketKey(iso){
   const t = new Date(iso).getTime();
   const step = (CONFIG.slotMinutes || 30) * 60000;
@@ -945,12 +945,13 @@ async function loadOperatingHours(){
       CONFIG.opHours = { schedule: sched, alwaysOpen: false }; return;
     }
     if (oh.msdyn_calendarid){
-      const cal = await _apiGet("/calendars(" + oh.msdyn_calendarid + ")?$expand=calendar_calendar_rules($select=duration,starttime,pattern)");
+      const cal = await _apiGet("/calendars(" + oh.msdyn_calendarid + ")?$expand=calendar_calendar_rules($select=duration,starttime,pattern,extentcode)");
       const rules = (cal && cal.calendar_calendar_rules) || [];
       const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
       for (const r of rules){
+        if (r.extentcode === 1) continue;
         if (!r.pattern || !r.starttime || !r.duration) continue;
-        const open = _hhmmToMin(r.starttime), close = open + r.duration;
+        const open = _hhmmToMin(r.starttime); const close = Math.min(open + r.duration, 24*60);
         const m = /BYDAY=([A-Z,]+)/.exec(r.pattern);
         const days = m ? m[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
         for (const d of days){ const i = map[d]; if (i != null) sched[i] = { openMin: open, closeMin: close }; }

@@ -552,14 +552,26 @@ function renderHours(queueName, oh, sched, ignore){
     return html;
   }
   if (sched.kind === "calendar"){
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + (sched.rules ? sched.rules.length : 0) + ' calendar rule(s). Customer page will honor them at runtime.</div>';
-    if (sched.rules && sched.rules.length){
-      html += '<table class="hours-table"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th></tr></thead><tbody>';
-      for (const r of sched.rules){
-        html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td></tr>';
-      }
-      html += '</tbody></table>';
+    const rules = sched.rules || [];
+    const weekly = parseWeeklyFromRules(rules);
+    const activeDays = Object.keys(weekly).length;
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + rules.length + ' calendar rule(s) - ' + activeDays + ' day(s) open. Customer page honors these at runtime.</div>';
+    html += '<table class="hours-table"><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody>';
+    for (let i=0;i<7;i++){
+      const w = weekly[i];
+      if (w) html += '<tr><td>' + DOW_FULL[i] + '</td><td class="open">' + _minToHhmm(w.openMin) + ' - ' + _minToHhmm(w.closeMin) + '</td></tr>';
+      else html += '<tr><td>' + DOW_FULL[i] + '</td><td class="closed">Closed</td></tr>';
     }
+    html += '</tbody></table>';
+    if (activeDays === 0){
+      html += '<div class="status warn" style="margin-top:8px">No day-of-week rules parsed. Customer page will fall back to 24/7. Raw rules below.</div>';
+    }
+    html += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">Raw calendar rules (' + rules.length + ')</summary>';
+    html += '<table class="hours-table" style="margin-top:6px"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th><th>Extent</th></tr></thead><tbody>';
+    for (const r of rules){
+      html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td><td>' + escHtml(String(r.extentcode == null ? "" : r.extentcode)) + '</td></tr>';
+    }
+    html += '</tbody></table></details>';
     return html;
   }
   if (sched.kind === "single"){
@@ -572,6 +584,31 @@ function renderHours(queueName, oh, sched, ignore){
 }
 
 function escHtml(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+function _hhmmToMin(s){
+  s = String(s||"");
+  if (s.indexOf("T")>=0){ const d=new Date(s); if(!isNaN(d)) return d.getUTCHours()*60+d.getUTCMinutes(); }
+  const p=s.split(":"); return (+p[0]||0)*60+(+p[1]||0);
+}
+function _minToHhmm(m){
+  m = Math.max(0, Math.min(24*60, +m||0));
+  const h = Math.floor(m/60), mm = m%60;
+  return (h<10?"0"+h:""+h) + ":" + (mm<10?"0"+mm:""+mm);
+}
+function parseWeeklyFromRules(rules){
+  const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
+  const sched = {};
+  for (const r of (rules||[])){
+    if (r.extentcode === 1) continue;
+    if (!r.pattern || !r.starttime || !r.duration) continue;
+    const open = _hhmmToMin(r.starttime);
+    const close = Math.min(open + r.duration, 24*60);
+    const m = /BYDAY=([A-Z,]+)/.exec(r.pattern);
+    const days = m ? m[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
+    for (const d of days){ const i = map[d]; if (i != null) sched[i] = { openMin: open, closeMin: close }; }
+  }
+  return sched;
+}
 
 /* ============================================================================
    Dashboard

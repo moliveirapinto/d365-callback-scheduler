@@ -35,12 +35,11 @@ As soon as a customer submits their request, a clean confirmation card appears w
 2. [The Admin Page](#the-admin-page)
 3. [Prerequisites](#prerequisites)
 4. [Installation](#installation)
-5. [Accessing the Booking Page](#accessing-the-booking-page)
-6. [Creating Workstream Context Variables](#creating-workstream-context-variables)
-7. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
-8. [Topic Options](#topic-options)
-9. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
-10. [Uninstalling](#uninstalling)
+5. [Creating Workstream Context Variables](#creating-workstream-context-variables)
+6. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
+7. [Topic Options](#topic-options)
+8. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
+9. [Uninstalling](#uninstalling)
 
 ---
 
@@ -112,13 +111,7 @@ The admin page is meant for supervisors and administrators. Anyone with the stan
 
 ### How to open it
 
-Inside Dynamics 365, navigate to the admin web resource:
-
-```
-https://<your-org>.crm.dynamics.com/WebResources/cbk_callback/setup.html
-```
-
-Bookmark it once and you'll never have to type that again.
+The admin page lives inside the **Customer Service Admin Center** as a menu item — see [Step 3 of the Installation](#step-3---add-the-admin-page-to-customer-service-admin-center) for the one-time setup. Once that's done, opening the page is as easy as clicking a sidebar link.
 
 ---
 
@@ -150,23 +143,22 @@ Before installing, confirm you have:
 6. Wait for the import to complete (may take 1-3 minutes). A green checkmark confirms success.
 7. Click **Publish all customizations** to activate everything
 
----
+### Step 3 - Add the admin page to Customer Service Admin Center
 
-## Accessing the Booking Page
+The admin page needs to live inside an app to work — it relies on the Dynamics host for sign-in, permissions, and the live connection to your data. The cleanest place to put it is as a menu item in the **Customer Service Admin Center**, right where every other contact-center setting lives.
 
-The booking page is deployed as the HTML web resource `cbk_cbk/callback_app.html`. It is designed to run inside the **Dynamics 365 Customer Service Workspace**, embedded as an application tab on the voice session.
+1. Open the **Customer Service Admin Center** app from your Dynamics 365 home screen
+2. In the top-right, click the **gear icon** &rarr; **Advanced settings** &rarr; **App settings** (or, alternatively, open the app in edit mode from [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service admin center** &rarr; **Edit &rarr; Edit in preview**)
+3. In the sitemap editor, pick the area where you want the menu item to appear (a good spot is **Customer support** &rarr; **Workstreams**, so it sits next to the other callback settings)
+4. Click **+ New** &rarr; **Subarea**
+5. Fill in the panel on the right:
+   - **Type**: *Web resource*
+   - **URL**: `cbk_callback/setup.html`
+   - **Title**: *Callback Scheduler*
+   - **Icon**: pick any icon you like (a phone or calendar works well)
+6. Click **Save** &rarr; **Publish**
 
-### For testing - direct URL
-
-Navigate to:
-
-```
-https://<your-org>.crm.dynamics.com/WebResources/cbk_cbk_callback_app.html
-```
-
-Replace `<your-org>` with your org subdomain (e.g. `contoso`).
-
-> When opened directly in the browser while logged in to Dynamics 365, the page uses your session cookies to authenticate. This is the quickest way to verify the setup.
+From now on, anyone with admin or supervisor permissions can open the Customer Service Admin Center and click **Callback Scheduler** in the sidebar to manage settings and watch the live dashboard. No URLs to remember, no bookmarks to share.
 
 ---
 

@@ -91,11 +91,13 @@
   /* operating hours panel */
   .info-panel{background:linear-gradient(180deg,#eef2ff 0%, #f6f8ff 100%);border:1px solid #dbe2ff;border-radius:14px;padding:16px;font-size:13px;line-height:1.55;color:#3b3f57;margin-top:14px}
   .info-panel b{color:var(--ink)}
-  .hours-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-  .hours-table th,.hours-table td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line-2)}
+  .hours-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;table-layout:auto}
+  .hours-table th,.hours-table td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line-2);word-break:break-word;overflow-wrap:anywhere}
   .hours-table th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
   .hours-table .closed{color:var(--bad);font-weight:600}
   .hours-table .open{color:var(--good);font-weight:600}
+  .hours-table code{white-space:normal;word-break:break-all}
+  .hours-scroll{overflow-x:auto;max-width:100%}
   .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;background:#eef2ff;color:var(--accent)}
   .badge.alldays{background:#d6f5e6;color:var(--good)}
   .badge.none{background:#ffe5ec;color:var(--bad)}
@@ -567,11 +569,11 @@ function renderHours(queueName, oh, sched, ignore){
       html += '<div class="status warn" style="margin-top:8px">No day-of-week rules parsed. Customer page will fall back to 24/7. Raw rules below.</div>';
     }
     html += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">Raw calendar rules (' + rules.length + ')</summary>';
-    html += '<table class="hours-table" style="margin-top:6px"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th><th>Extent</th></tr></thead><tbody>';
+    html += '<div class="hours-scroll"><table class="hours-table" style="margin-top:6px;min-width:560px"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th><th>Extent</th></tr></thead><tbody>';
     for (const r of rules){
       html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td><td>' + escHtml(String(r.extentcode == null ? "" : r.extentcode)) + '</td></tr>';
     }
-    html += '</tbody></table></details>';
+    html += '</tbody></table></div></details>';
     return html;
   }
   if (sched.kind === "single"){

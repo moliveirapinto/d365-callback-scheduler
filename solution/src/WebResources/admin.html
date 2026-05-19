@@ -345,7 +345,11 @@ async function api(path, opts){
     Accept: "application/json",
     "OData-MaxVersion": "4.0",
     "OData-Version": "4.0",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    /* defeat Power Apps / browser caching on GET responses (Dataverse rejects
+       unknown query params like _=timestamp, so we use headers instead). */
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache"
   }, opts.headers || {});
   const r = await fetch(BASE + path, {
     method: opts.method || "GET",
@@ -710,8 +714,7 @@ async function loadDashboard(){
       + "?$select=msdyn_proactive_deliveryid,msdyn_to_address,msdyn_from_address,msdyn_contact_id,"
       + "msdyn_proactive_engagement_config_id,msdyn_window_start_date,msdyn_window_end_date,"
       + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon,msdyn_conversation_id"
-      + "&$orderby=createdon desc&$top=500"
-      + "&_=" + Date.now() /* cache-bust: service writes async, browser/Power Apps cache aggressively */);
+      + "&$orderby=createdon desc&$top=500");
     dashRows = j.value;
     /* enrich engagement config name */
     const cfgIds = Array.from(new Set(dashRows.map(r => r.msdyn_proactive_engagement_config_id).filter(Boolean)));

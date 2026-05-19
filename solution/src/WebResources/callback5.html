@@ -810,15 +810,30 @@ form.addEventListener("submit", async (e) => {
       if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
       bindCustomerLater(payload, contactId);
       showSuccess(payload);
-    } else if (CONFIG.flowTriggerUrl) {
-      const resp = await fetch(CONFIG.flowTriggerUrl, {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(payload)
-      });
-      if (!resp.ok) throw new Error("Server returned " + resp.status);
-      showSuccess(payload);
     } else {
-      throw new Error("No backend configured. Set cbk_FlowTriggerUrl env var (or open this page from inside D365).");
+      /* CUSTOMER mode: prefer same-origin Web API via cookie (works for any
+         authenticated user). Fall back to the public Flow trigger URL only
+         if the action call fails AND a flow URL is configured. */
+      let restErr = null;
+      if (CONFIG.proactiveEngagementConfigId){
+        try {
+          const contactId = await resolveContactRest(payload);
+          const r = await callActionRest(payload, contactId);
+          if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
+          showSuccess(payload);
+          return;
+        } catch(e){ restErr = e; console.warn("[cbk] REST action failed, will try flow URL", e); }
+      }
+      if (CONFIG.flowTriggerUrl){
+        const resp = await fetch(CONFIG.flowTriggerUrl, {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) throw new Error("Flow returned " + resp.status + (restErr ? " (REST also failed: " + restErr.message + ")" : ""));
+        showSuccess(payload);
+        return;
+      }
+      throw new Error(restErr ? restErr.message : "No backend configured. Set cbk_FlowTriggerUrl env var (or open this page from inside D365).");
     }
   } catch(err){
     console.error(err);
@@ -925,6 +940,64 @@ async function _apiGet(rel){
   });
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
+}
+async function _apiPost(rel, body){
+  const r = await fetch(_apiBase() + rel, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json", "Content-Type": "application/json; charset=utf-8", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok){ const t = await r.text().catch(() => ""); throw new Error("POST " + rel + " -> " + r.status + (t ? " " + t.slice(0,300) : "")); }
+  if (r.status === 204){
+    const loc = r.headers.get("OData-EntityId") || "";
+    const m = /\(([0-9a-fA-F-]{36})\)/.exec(loc);
+    return m ? { id: m[1] } : null;
+  }
+  return r.json();
+}
+async function resolveContactRest(p){
+  const esc = s => String(s).replace(/'/g, "''");
+  const clauses = [];
+  if (p.email)     clauses.push("emailaddress1 eq '" + esc(p.email) + "'");
+  if (p.phoneE164){ clauses.push("mobilephone eq '" + esc(p.phoneE164) + "'"); clauses.push("telephone1 eq '" + esc(p.phoneE164) + "'"); }
+  if (clauses.length){
+    const filter = clauses.join(" or ");
+    const q = "/contacts?$select=contactid,emailaddress1,mobilephone,telephone1,modifiedon,fullname&$top=25&$filter=" + encodeURIComponent(filter);
+    const j = await _apiGet(q);
+    const ents = j.value || [];
+    if (ents.length){
+      const score = c => {
+        const eHit = p.email && c.emailaddress1 && c.emailaddress1.toLowerCase() === p.email.toLowerCase();
+        const pHit = p.phoneE164 && (c.mobilephone === p.phoneE164 || c.telephone1 === p.phoneE164);
+        return (eHit && pHit) ? 100 : pHit ? 50 : eHit ? 25 : 0;
+      };
+      ents.sort((a,b) => score(b)-score(a) || String(b.modifiedon||"").localeCompare(String(a.modifiedon||"")));
+      return ents[0].contactid;
+    }
+  }
+  const created = await _apiPost("/contacts", {
+    firstname: p.firstName, lastname: p.lastName,
+    emailaddress1: p.email, mobilephone: p.phoneE164, telephone1: p.phoneE164
+  });
+  return created && created.id;
+}
+async function callActionRest(p, contactId){
+  const inputAttrs = {
+    type: "callback", topic: p.topic, firstName: p.firstName, lastName: p.lastName,
+    notes: p.notes || "", consentTimestampUtc: p.consentTimestampUtc,
+    customerEmail: p.email, customerLocale: p.locale, customerTimeZone: p.timeZone,
+    sourceUrl: window.location.href
+  };
+  const body = {
+    ApiVersion: "1.0",
+    ProactiveEngagementConfigId: CONFIG.proactiveEngagementConfigId,
+    DestinationPhoneNumber: p.phoneE164,
+    ContactId: contactId,
+    Windows:         JSON.stringify([{ Start: p.windowStartIso, End: p.windowEndIso }]),
+    InputAttributes: JSON.stringify(inputAttrs)
+  };
+  return _apiPost("/CCaaS_CreateProactiveVoiceDelivery", body);
 }
 function _hhmmToMin(s){ s = String(s||""); if (s.indexOf("T")>=0){ const d=new Date(s); if(!isNaN(d)) return d.getUTCHours()*60+d.getUTCMinutes(); } const p=s.split(":"); return (+p[0]||0)*60+(+p[1]||0); }
 function _bucketKey(iso){

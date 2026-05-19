@@ -876,7 +876,7 @@ function _bucketKey(iso){
 }
 
 async function loadOperatingHours(){
-  CONFIG.opHours = { schedule: null, alwaysOpen: true };
+  CONFIG.opHours = { schedule: null, dateOverrides: {}, alwaysOpen: true };
   try {
     const cfgId = CONFIG.proactiveEngagementConfigId; if (!cfgId) return;
     const cfg = await _apiGet("/msdyn_proactive_engagement_configs(" + cfgId + ")?$select=_msdyn_queue_value");
@@ -884,35 +884,67 @@ async function loadOperatingHours(){
     const q = await _apiGet("/queues(" + qId + ")?$select=_msdyn_operatinghourid_value");
     const ohId = q && q._msdyn_operatinghourid_value; if (!ohId) return;
     const oh = await _apiGet("/msdyn_operatinghours(" + ohId + ")?$select=msdyn_enablealldays,msdyn_starttimestring,msdyn_endtimestring,msdyn_calendarid");
-    const sched = {};
+    const sched = {}; const overrides = {};
     if (oh.msdyn_enablealldays){
       const win = { openMin: _hhmmToMin(oh.msdyn_starttimestring || "00:00"), closeMin: _hhmmToMin(oh.msdyn_endtimestring || "24:00") };
       for (let i=0;i<7;i++) sched[i] = win;
-      CONFIG.opHours = { schedule: sched, alwaysOpen: false }; return;
+      CONFIG.opHours = { schedule: sched, dateOverrides: overrides, alwaysOpen: false }; return;
     }
     if (oh.msdyn_calendarid){
-      const cal = await _apiGet("/calendars(" + oh.msdyn_calendarid + ")?$expand=calendar_calendar_rules($select=duration,starttime,pattern,extentcode)");
-      const rules = (cal && cal.calendar_calendar_rules) || [];
-      const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
-      for (const r of rules){
-        if (r.extentcode === 1) continue;
-        if (!r.pattern || !r.starttime || !r.duration) continue;
-        const open = _hhmmToMin(r.starttime); const close = Math.min(open + r.duration, 24*60);
-        const m = /BYDAY=([A-Z,]+)/.exec(r.pattern);
-        const days = m ? m[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
-        for (const d of days){ const i = map[d]; if (i != null) sched[i] = { openMin: open, closeMin: close }; }
+      const parsed = await _parseCalendarSchedule(oh.msdyn_calendarid);
+      Object.assign(sched, parsed.weekly); Object.assign(overrides, parsed.dateOverrides);
+      if (Object.keys(sched).length || Object.keys(overrides).length){
+        CONFIG.opHours = { schedule: sched, dateOverrides: overrides, alwaysOpen: false }; return;
       }
-      if (Object.keys(sched).length){ CONFIG.opHours = { schedule: sched, alwaysOpen: false }; return; }
     }
     if (oh.msdyn_starttimestring && oh.msdyn_endtimestring){
       const win = { openMin: _hhmmToMin(oh.msdyn_starttimestring), closeMin: _hhmmToMin(oh.msdyn_endtimestring) };
       for (let i=1;i<=5;i++) sched[i] = win;
-      CONFIG.opHours = { schedule: sched, alwaysOpen: false };
+      CONFIG.opHours = { schedule: sched, dateOverrides: overrides, alwaysOpen: false };
     }
   } catch(e){ console.warn("[cbk] loadOperatingHours failed", e); }
 }
+async function _parseCalendarSchedule(calendarId){
+  const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
+  const weekly = {}; const dateOverrides = {};
+  const cal = await _apiGet("/calendars(" + calendarId + ")?$expand=calendar_calendar_rules($select=duration,starttime,pattern,extentcode,rank,_innercalendarid_value)");
+  const rules = (cal && cal.calendar_calendar_rules) || [];
+  const innerIds = Array.from(new Set(rules.map(r => r._innercalendarid_value).filter(Boolean)));
+  const innerMap = {};
+  await Promise.all(innerIds.map(async id => {
+    try {
+      const ic = await _apiGet("/calendars(" + id + ")?$expand=calendar_calendar_rules($select=offset,duration,rank)");
+      const irules = ((ic && ic.calendar_calendar_rules) || []).slice().sort((a,b) => (+a.rank||0)-(+b.rank||0));
+      if (irules.length){
+        const r0 = irules[0];
+        const open = +r0.offset || 0;
+        const close = Math.min(open + (+r0.duration || 0), 24*60);
+        innerMap[id] = { openMin: open, closeMin: close };
+      }
+    } catch(e){ console.warn("[cbk] inner calendar fetch failed", id, e); }
+  }));
+  for (const r of rules){
+    if (r.extentcode === 1) continue;
+    const win = innerMap[r._innercalendarid_value];
+    if (!win) continue;
+    const mat = /BYDAY=([A-Z,]+)/.exec(r.pattern || "");
+    const days = mat ? mat[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
+    for (const d of days){ const i = map[d]; if (i != null) weekly[i] = win; }
+  }
+  for (const r of rules){
+    if (r.extentcode !== 1) continue;
+    if (!r.starttime) continue;
+    const key = String(r.starttime).slice(0,10);
+    const win = innerMap[r._innercalendarid_value];
+    dateOverrides[key] = win || { openMin: 0, closeMin: 0 };
+  }
+  return { weekly, dateOverrides };
+}
+function _localDateKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function getDayWindow(d){
   if (!CONFIG.opHours || CONFIG.opHours.alwaysOpen) return { openMin: 0, closeMin: 24*60 };
+  const k = _localDateKey(d);
+  if (CONFIG.opHours.dateOverrides && CONFIG.opHours.dateOverrides[k]) return CONFIG.opHours.dateOverrides[k];
   return (CONFIG.opHours.schedule && CONFIG.opHours.schedule[d.getDay()]) || null;
 }
 

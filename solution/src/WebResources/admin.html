@@ -526,9 +526,23 @@ async function resolveSchedule(oh){
     try {
       const cal = await api("/calendars(" + oh.msdyn_calendarid + ")"
         + "?$select=calendarid,name"
-        + "&$expand=calendar_calendar_rules($select=duration,extentcode,starttime,timezonecode,rank,name,subcode,description,pattern,effectiveintervalstart,effectiveintervalend)");
+        + "&$expand=calendar_calendar_rules($select=duration,extentcode,starttime,timezonecode,rank,name,subcode,description,pattern,effectiveintervalstart,effectiveintervalend,_innercalendarid_value)");
       const rules = cal.calendar_calendar_rules || [];
-      return { kind: "calendar", rules };
+      const innerIds = Array.from(new Set(rules.map(r => r._innercalendarid_value).filter(Boolean)));
+      const innerMap = {};
+      await Promise.all(innerIds.map(async id => {
+        try {
+          const ic = await api("/calendars(" + id + ")?$expand=calendar_calendar_rules($select=offset,duration,rank)");
+          const irules = ((ic && ic.calendar_calendar_rules) || []).slice().sort((a,b) => (+a.rank||0)-(+b.rank||0));
+          if (irules.length){
+            const r0 = irules[0];
+            const open = +r0.offset || 0;
+            const close = Math.min(open + (+r0.duration || 0), 24*60);
+            innerMap[id] = { openMin: open, closeMin: close };
+          }
+        } catch(e){ console.warn("[cbk] inner calendar fetch failed", id, e); }
+      }));
+      return { kind: "calendar", rules, innerMap };
     } catch(e){
       console.warn("[cbk] calendar expand failed", e);
       return { kind: "unknown", error: e && e.message };
@@ -555,9 +569,12 @@ function renderHours(queueName, oh, sched, ignore){
   }
   if (sched.kind === "calendar"){
     const rules = sched.rules || [];
-    const weekly = parseWeeklyFromRules(rules);
+    const innerMap = sched.innerMap || {};
+    const weekly = parseWeeklyFromRules(rules, innerMap);
+    const overrides = parseOverridesFromRules(rules, innerMap);
     const activeDays = Object.keys(weekly).length;
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + rules.length + ' calendar rule(s) - ' + activeDays + ' day(s) open. Customer page honors these at runtime.</div>';
+    const overrideKeys = Object.keys(overrides).sort();
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + rules.length + ' calendar rule(s) - ' + activeDays + ' weekly day(s) open' + (overrideKeys.length ? ', ' + overrideKeys.length + ' date override(s)' : '') + '. Customer page honors these at runtime.</div>';
     html += '<table class="hours-table"><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody>';
     for (let i=0;i<7;i++){
       const w = weekly[i];
@@ -565,13 +582,26 @@ function renderHours(queueName, oh, sched, ignore){
       else html += '<tr><td>' + DOW_FULL[i] + '</td><td class="closed">Closed</td></tr>';
     }
     html += '</tbody></table>';
-    if (activeDays === 0){
+    if (overrideKeys.length){
+      html += '<div style="font-size:12px;color:var(--muted);margin-top:10px">Date overrides</div>';
+      html += '<table class="hours-table"><thead><tr><th>Date</th><th>Hours</th></tr></thead><tbody>';
+      for (const k of overrideKeys){
+        const w = overrides[k];
+        const isClosed = (w.openMin === 0 && w.closeMin === 0);
+        if (isClosed) html += '<tr><td>' + escHtml(k) + '</td><td class="closed">Closed</td></tr>';
+        else html += '<tr><td>' + escHtml(k) + '</td><td class="open">' + _minToHhmm(w.openMin) + ' - ' + _minToHhmm(w.closeMin) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    if (activeDays === 0 && overrideKeys.length === 0){
       html += '<div class="status warn" style="margin-top:8px">No day-of-week rules parsed. Customer page will fall back to 24/7. Raw rules below.</div>';
     }
     html += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">Raw calendar rules (' + rules.length + ')</summary>';
-    html += '<div class="hours-scroll"><table class="hours-table" style="margin-top:6px;min-width:560px"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th><th>Extent</th></tr></thead><tbody>';
+    html += '<div class="hours-scroll"><table class="hours-table" style="margin-top:6px;min-width:560px"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th><th>Extent</th><th>Inner hrs</th></tr></thead><tbody>';
     for (const r of rules){
-      html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td><td>' + escHtml(String(r.extentcode == null ? "" : r.extentcode)) + '</td></tr>';
+      const inner = innerMap[r._innercalendarid_value];
+      const innerStr = inner ? (_minToHhmm(inner.openMin) + '-' + _minToHhmm(inner.closeMin)) : '';
+      html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td><td>' + escHtml(String(r.extentcode == null ? "" : r.extentcode)) + '</td><td>' + escHtml(innerStr) + '</td></tr>';
     }
     html += '</tbody></table></div></details>';
     return html;
@@ -597,19 +627,32 @@ function _minToHhmm(m){
   const h = Math.floor(m/60), mm = m%60;
   return (h<10?"0"+h:""+h) + ":" + (mm<10?"0"+mm:""+mm);
 }
-function parseWeeklyFromRules(rules){
+function parseWeeklyFromRules(rules, innerMap){
   const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
   const sched = {};
+  innerMap = innerMap || {};
   for (const r of (rules||[])){
     if (r.extentcode === 1) continue;
-    if (!r.pattern || !r.starttime || !r.duration) continue;
-    const open = _hhmmToMin(r.starttime);
-    const close = Math.min(open + r.duration, 24*60);
+    if (!r.pattern) continue;
+    const win = innerMap[r._innercalendarid_value];
+    if (!win) continue;
     const m = /BYDAY=([A-Z,]+)/.exec(r.pattern);
     const days = m ? m[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
-    for (const d of days){ const i = map[d]; if (i != null) sched[i] = { openMin: open, closeMin: close }; }
+    for (const d of days){ const i = map[d]; if (i != null) sched[i] = win; }
   }
   return sched;
+}
+function parseOverridesFromRules(rules, innerMap){
+  const out = {};
+  innerMap = innerMap || {};
+  for (const r of (rules||[])){
+    if (r.extentcode !== 1) continue;
+    if (!r.starttime) continue;
+    const key = String(r.starttime).slice(0,10);
+    const win = innerMap[r._innercalendarid_value];
+    out[key] = win || { openMin: 0, closeMin: 0 };
+  }
+  return out;
 }
 
 /* ============================================================================

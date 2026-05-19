@@ -19,9 +19,9 @@ Five ready-made page layouts ship with the solution. They all do the same thing 
   </tr>
 </table>
 
-## What the agent sees
+## Confirmation card
 
-When the scheduled call connects, the agent's Active Conversation form already shows the topic the customer chose and any notes they left — so the conversation starts with full context, no awkward "what is this about?" moment.
+As soon as a customer submits their request, a clean confirmation card appears with the day, time window, phone number, and topic they selected — so they leave the page knowing exactly when to expect the call and what was booked.
 
 <p align="center">
   <img src="img/sssscreenshot_cbk0.jpeg" width="80%" alt="Agent view of scheduled callback in Active Conversation" />

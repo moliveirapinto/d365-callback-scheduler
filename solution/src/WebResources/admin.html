@@ -144,6 +144,18 @@
   @keyframes spin{to{transform:rotate(360deg)}}
 
   .nag{padding:14px 16px;border-radius:12px;border:1px solid #f3c1c1;background:#fff5f5;color:#7a1f37;font-weight:600;font-size:14px;margin-bottom:18px}
+
+  /* ------- Confirm modal ------- */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(11,16,32,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px;opacity:0;pointer-events:none;transition:opacity .18s ease}
+  .modal-backdrop.is-open{opacity:1;pointer-events:auto}
+  .modal{background:#fff;border-radius:16px;box-shadow:0 30px 80px -20px rgba(11,16,32,.45),0 0 0 1px rgba(11,16,32,.06);width:100%;max-width:440px;padding:28px;transform:translateY(8px) scale(.98);transition:transform .18s ease;font-family:var(--sans)}
+  .modal-backdrop.is-open .modal{transform:translateY(0) scale(1)}
+  .modal .icon-wrap{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#ffe5ec,#ffd0db);display:flex;align-items:center;justify-content:center;color:var(--bad);margin:0 auto 16px}
+  .modal h3{margin:0 0 8px;text-align:center;font-size:20px;font-weight:700;color:var(--ink);font-family:var(--serif)}
+  .modal p{margin:0 0 22px;text-align:center;color:var(--muted);font-size:14px;line-height:1.55}
+  .modal .actions{display:flex;gap:10px;justify-content:flex-end}
+  .modal .actions .btn{padding:10px 18px;font-size:13.5px}
+  @keyframes modalIn{from{opacity:0;transform:translateY(8px) scale(.98)} to{opacity:1;transform:translateY(0) scale(1)}}
 </style>
 </head>
 <body>
@@ -867,7 +879,14 @@ document.addEventListener("click", (e) => {
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button.cancel-row"); if (!b) return;
   const id = b.dataset.id;
-  if (!confirm("Cancel this scheduled callback?")) return;
+  const ok = await confirmModal({
+    title: "Cancel scheduled callback?",
+    message: "This will mark the delivery as Cancelled in Dataverse. The customer will not be called. This action cannot be undone.",
+    confirmText: "Yes, cancel callback",
+    cancelText: "Keep it",
+    danger: true
+  });
+  if (!ok) return;
   b.disabled = true; b.textContent = "Cancelling...";
   try {
     await api("/msdyn_proactive_deliveries(" + id + ")", {
@@ -921,6 +940,59 @@ document.addEventListener("click", async (e) => {
 
   loadDashboard();
 })();
+
+/* ============================================================================
+   Confirm modal helper
+   ============================================================================ */
+function confirmModal(opts){
+  return new Promise(function(resolve){
+    var o = opts || {};
+    var title = o.title || "Are you sure?";
+    var msg = o.message || "";
+    var okText = o.confirmText || "Confirm";
+    var cancelText = o.cancelText || "Cancel";
+    var danger = !!o.danger;
+    var bd = document.createElement("div");
+    bd.className = "modal-backdrop";
+    bd.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="cmTitle">' +
+        '<div class="icon-wrap">' +
+          (danger
+            ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+            : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>') +
+        '</div>' +
+        '<h3 id="cmTitle"></h3>' +
+        '<p></p>' +
+        '<div class="actions">' +
+          '<button type="button" class="btn ghost" data-act="cancel"></button>' +
+          '<button type="button" class="btn ' + (danger ? 'danger' : '') + '" data-act="ok"></button>' +
+        '</div>' +
+      '</div>';
+    bd.querySelector("#cmTitle").textContent = title;
+    bd.querySelector("p").textContent = msg;
+    bd.querySelector('[data-act="cancel"]').textContent = cancelText;
+    bd.querySelector('[data-act="ok"]').textContent = okText;
+    document.body.appendChild(bd);
+    requestAnimationFrame(function(){ bd.classList.add("is-open"); });
+    function close(val){
+      bd.classList.remove("is-open");
+      setTimeout(function(){ bd.remove(); document.removeEventListener("keydown", onKey); }, 180);
+      resolve(val);
+    }
+    function onKey(e){
+      if (e.key === "Escape") close(false);
+      else if (e.key === "Enter") close(true);
+    }
+    bd.addEventListener("click", function(e){
+      if (e.target === bd) close(false);
+      var a = e.target.closest("[data-act]");
+      if (!a) return;
+      close(a.dataset.act === "ok");
+    });
+    document.addEventListener("keydown", onKey);
+    setTimeout(function(){ bd.querySelector('[data-act="ok"]').focus(); }, 30);
+  });
+}
 </script>
 </body>
 </html>

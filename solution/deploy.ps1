@@ -5,7 +5,7 @@
 .DESCRIPTION
   - Creates publisher (cbk) and solution (CallbackScheduler) if they don't exist
   - Creates 6 cbk_ environment variable definitions with sensible defaults
-  - Uploads cbk_callback/app.html and cbk_callback/setup.html as web resources
+  - Uploads cbk_callback1..5.html (5 UI variants) and cbk_callback/setup.html as web resources
   - Adds all components to the solution
   - Publishes customizations
   - (Optional) Exports the solution as a managed .zip for distribution
@@ -52,8 +52,12 @@ $EnvVars = @(
 
 # Web resources to upload (local relative path - resource name)
 $WebResources = @(
-  @{ name="cbk_callback/app.html";   file="src/WebResources/cbk_callback/app.html";   display="Callback Scheduler - App";   type=1 },
-  @{ name="cbk_callback/setup.html"; file="src/WebResources/cbk_callback/setup.html"; display="Callback Scheduler - Setup"; type=1 }
+  @{ name="cbk_callback1.html";      file="src/WebResources/callback1.html"; display="Callback Scheduler 1";       type=1 },
+  @{ name="cbk_callback2.html";      file="src/WebResources/callback2.html"; display="Callback Scheduler 2";       type=1 },
+  @{ name="cbk_callback3.html";      file="src/WebResources/callback3.html"; display="Callback Scheduler 3";       type=1 },
+  @{ name="cbk_callback4.html";      file="src/WebResources/callback4.html"; display="Callback Scheduler 4";       type=1 },
+  @{ name="cbk_callback5.html";      file="src/WebResources/callback5.html"; display="Callback Scheduler 5";       type=1 },
+  @{ name="cbk_callback/setup.html"; file="src/WebResources/setup.html";     display="Callback Scheduler - Setup"; type=1 }
 )
 
 # --- auth ------------------------------------------------------------------
@@ -235,5 +239,5 @@ Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 Write-Host "Open the setup page in your environment:" -ForegroundColor Yellow
 Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback/setup.html"
-Write-Host "Open the scheduler page:"
-Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback/app.html"
+Write-Host "Open the scheduler page (variant 1; replace 1 with 2-5 for other variants):"
+Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback1.html"

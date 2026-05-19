@@ -8,7 +8,11 @@ This repo ships as a **Dataverse solution**: nothing is hardcoded for any specif
 
 | Component | Type | Purpose |
 |---|---|---|
-| `cbk_callback/app.html` | Web resource (HTML) | The customer-/agent-facing scheduling page |
+| `cbk_callback1.html` | Web resource (HTML) | Scheduling page - variant 1 (default UI) |
+| `cbk_callback2.html` | Web resource (HTML) | Scheduling page - variant 2 (Brutalist UI) |
+| `cbk_callback3.html` | Web resource (HTML) | Scheduling page - variant 3 (Glassmorphism UI) |
+| `cbk_callback4.html` | Web resource (HTML) | Scheduling page - variant 4 (Swiss Editorial UI) |
+| `cbk_callback5.html` | Web resource (HTML) | Scheduling page - variant 5 (Terracotta UI) |
 | `cbk_callback/setup.html` | Web resource (HTML) | One-click admin setup: discovers proactive engagement configs in your env and writes the env vars |
 | `cbk_ProactiveEngagementConfigId` | Env var (String) | GUID of the Proactive Engagement Configuration to use. Blank = auto-discover the first one. |
 | `cbk_HourStart` | Env var (Number, default `9`) | First bookable hour (24h, local time) |
@@ -55,7 +59,7 @@ Once produced by Option A, the `.zip` can be imported into any other environment
 
 ### Open the scheduler
 
-`https://YOUR-ORG.crm.dynamics.com/main.aspx?pagetype=webresource&webresourceName=cbk_callback/app.html`
+`https://YOUR-ORG.crm.dynamics.com/main.aspx?pagetype=webresource&webresourceName=cbk_callback1.html`
 
 Embed it anywhere in your model-driven app (sitemap subarea, dashboard iframe, session template, etc.).
 
@@ -87,11 +91,12 @@ Use this when iterating on the UI without redeploying the web resource. Run `pro
     ├── dist/              # output: CallbackScheduler_managed_X.Y.Z.zip
     └── src/
         └── WebResources/
-            └── cbk_callback/
-                ├── app.html
-                ├── app.html.data.xml
-                ├── setup.html
-                └── setup.html.data.xml
+            ├── callback1.html
+            ├── callback2.html
+            ├── callback3.html
+            ├── callback4.html
+            ├── callback5.html
+            └── setup.html
 ```
 
 ## License

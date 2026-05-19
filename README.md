@@ -2,9 +2,29 @@
 
 A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center. Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call — with real-time estimated waiting times shown live on the page. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
 
+## Choose the look that fits your brand
+
+Five ready-made page layouts ship with the solution. They all do the same thing — book a callback — but each has its own personality. Pick the one that best matches your website, switch between them at any time from the admin page.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><b>Layout 1 — Classic</b><br/><img src="img/01.png" alt="Layout 1" width="100%"/></td>
+    <td align="center" width="33%"><b>Layout 2 — Card</b><br/><img src="img/02.png" alt="Layout 2" width="100%"/></td>
+    <td align="center" width="33%"><b>Layout 3 — Split</b><br/><img src="img/03.png" alt="Layout 3" width="100%"/></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><b>Layout 4 — Minimal</b><br/><img src="img/04.png" alt="Layout 4" width="100%"/></td>
+    <td align="center" width="33%"><b>Layout 5 — Bold</b><br/><img src="img/05.png" alt="Layout 5" width="100%"/></td>
+    <td align="center" width="33%" valign="middle"><i>Try them all and keep the one your customers love most.</i></td>
+  </tr>
+</table>
+
+## What the agent sees
+
+When the scheduled call connects, the agent's Active Conversation form already shows the topic the customer chose and any notes they left — so the conversation starts with full context, no awkward "what is this about?" moment.
+
 <p align="center">
-  <img src="img/screenshot.jpeg" width="49%" alt="Callback Scheduler booking page" />
-  <img src="img/sssscreenshot_cbk0.jpeg" width="49%" alt="Agent view of scheduled callback in Active Conversation" />
+  <img src="img/sssscreenshot_cbk0.jpeg" width="80%" alt="Agent view of scheduled callback in Active Conversation" />
 </p>
 
 ---
@@ -12,14 +32,15 @@ A customer-facing self-service callback booking page for Microsoft Dynamics 365 
 ## Table of Contents
 
 1. [What It Does](#what-it-does)
-2. [Prerequisites](#prerequisites)
-3. [Installation](#installation)
-4. [Accessing the Booking Page](#accessing-the-booking-page)
-5. [Creating Workstream Context Variables](#creating-workstream-context-variables)
-6. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
-7. [Topic Options](#topic-options)
-8. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
-9. [Uninstalling](#uninstalling)
+2. [The Admin Page](#the-admin-page)
+3. [Prerequisites](#prerequisites)
+4. [Installation](#installation)
+5. [Accessing the Booking Page](#accessing-the-booking-page)
+6. [Creating Workstream Context Variables](#creating-workstream-context-variables)
+7. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
+8. [Topic Options](#topic-options)
+9. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
+10. [Uninstalling](#uninstalling)
 
 ---
 
@@ -44,6 +65,60 @@ Once submitted, the system:
 |---|---|---|
 | What is it about? | `cbk_whatsitabout_` | Choice |
 | Anything we should know? | `maulabs_anythingweshouldknow` | Text |
+
+---
+
+## The Admin Page
+
+Everything about the booking experience — how long each slot is, which workstream handles the calls, how many bookings a single slot can take, and whether customers can book more than once — lives on a single, friendly admin page. Open it once, set things the way you want, and you're done. Changes are picked up by the customer pages on their next refresh.
+
+<p align="center">
+  <img src="img/admin.png" width="92%" alt="Admin page - configure the scheduler and view live deliveries" />
+</p>
+
+### What you can do from the admin page
+
+**1. Time-slot length**
+Decide how long each callback window should be — 15, 30, 45 minutes, or a full hour. Shorter slots give customers more choice; longer slots give your agents a bit more breathing room between calls.
+
+**2. Workstream**
+Pick which voice workstream handles the callbacks. The page lists every proactive engagement configuration in your environment so you just choose one from the dropdown. The operating hours of the queue attached to that workstream are what customers see as "available days and times" — no extra setup required.
+
+**3. Capacity per slot**
+Set the maximum number of bookings allowed in a single time window. Once a slot is full, it disappears from the customer page automatically, so you'll never end up with twenty customers expecting a call at the exact same minute.
+
+**4. Multiple bookings per customer**
+A simple on/off switch. When it's off and a customer tries to book a second callback while they already have one scheduled, they see a friendly pop-up showing their existing booking and the choice to either keep it or cancel it and book the new one. When it's on, customers can stack as many bookings as they like.
+
+**5. Operating hours (read-only)**
+A quick view of the open/close times for each day of the week, taken straight from the queue you picked in step 2. Edit them in the standard D365 Operating Hours form — the admin page just shows them so you don't have to go hunting.
+
+### The live dashboard
+
+Scroll down on the admin page and you'll find a real-time list of every callback in your environment — past, upcoming, and everything in between.
+
+- **At-a-glance counters** show how many callbacks are upcoming, how many completed in the last 24 hours, how many are waiting, and how many were cancelled or failed.
+- **Filter chips** let you flip between *Upcoming*, *Past*, and *All*.
+- **Search box** finds bookings by phone number, customer name, or status.
+- **Auto-refresh** keeps the list current every 10 seconds — no need to keep hitting reload. There's a manual refresh button too if you're impatient.
+- **Cancel button** on each upcoming row lets you call off a booking on a customer's behalf. A confirmation dialog makes sure you don't cancel by accident.
+- **Click any row** to jump straight to the underlying conversation record in Dynamics — handy if you want the full history.
+
+> Heads-up: brand-new bookings can take 10–30 seconds to show up in the dashboard. That's the platform writing the record in the background, not the page being slow.
+
+### Who can use it
+
+The admin page is meant for supervisors and administrators. Anyone with the standard **System Administrator** or **Customer Service Manager** role can open it and change settings. Customer-facing pages don't need any of these permissions — they just read the saved settings.
+
+### How to open it
+
+Inside Dynamics 365, navigate to the admin web resource:
+
+```
+https://<your-org>.crm.dynamics.com/WebResources/cbk_callback/setup.html
+```
+
+Bookmark it once and you'll never have to type that again.
 
 ---
 

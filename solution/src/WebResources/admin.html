@@ -693,7 +693,7 @@ function _startAuto(){
   const chk = document.getElementById("autoRefreshChk");
   if (chk && chk.checked) _autoTimer = setInterval(function(){
     if (document.visibilityState === "visible") loadDashboard();
-  }, 20000);
+  }, 10000);
 }
 const _autoChk = document.getElementById("autoRefreshChk");
 if (_autoChk) _autoChk.addEventListener("change", _startAuto);
@@ -710,7 +710,8 @@ async function loadDashboard(){
       + "?$select=msdyn_proactive_deliveryid,msdyn_to_address,msdyn_from_address,msdyn_contact_id,"
       + "msdyn_proactive_engagement_config_id,msdyn_window_start_date,msdyn_window_end_date,"
       + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon,msdyn_conversation_id"
-      + "&$orderby=msdyn_window_start_date desc&$top=500");
+      + "&$orderby=createdon desc&$top=500"
+      + "&_=" + Date.now() /* cache-bust: service writes async, browser/Power Apps cache aggressively */);
     dashRows = j.value;
     /* enrich engagement config name */
     const cfgIds = Array.from(new Set(dashRows.map(r => r.msdyn_proactive_engagement_config_id).filter(Boolean)));

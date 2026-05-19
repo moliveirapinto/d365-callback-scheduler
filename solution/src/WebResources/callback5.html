@@ -800,10 +800,22 @@ form.addEventListener("submit", async (e) => {
   submitting = true;
   submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Scheduling…";
   try {
-    /* Duplicate-booking guard runs in BOTH modes -- helpers use cookie-auth
-       same-origin REST so they work for AGENT and CUSTOMER alike. */
-    if (CONFIG.allowMultipleBookings === false && CONFIG.proactiveEngagementConfigId) {
-      const existing = await findCustomerActiveDelivery(phoneE164);
+    if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
+
+    /* Resolve the contact ONCE up-front (same identity, used by both the
+       duplicate-booking guard and the action call below). */
+    let contactId = null;
+    try {
+      contactId = (MODE === "AGENT")
+        ? await resolveContactXrm(payload)
+        : await resolveContactRest(payload);
+    } catch(e){ console.warn("[cbk] contact resolve failed pre-guard", e); }
+
+    /* Duplicate-booking guard -- runs in BOTH modes. Filter by contact id
+       because msdyn_to_address is ALWAYS NULL on delivery rows (only the
+       service populates it later, and even then inconsistently). */
+    if (CONFIG.allowMultipleBookings === false && contactId) {
+      const existing = await findCustomerActiveDelivery(contactId, phoneE164);
       if (existing) {
         const act = await showExistingBookingModal(existing);
         if (act !== "cancel") {
@@ -814,9 +826,9 @@ form.addEventListener("submit", async (e) => {
         try { await cancelDelivery(existing.id); } catch(e){ console.warn("[cbk] cancel of existing delivery failed", e); }
       }
     }
+
     if (MODE === "AGENT") {
-      if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
-      const contactId = await resolveContactXrm(payload);
+      if (!contactId) contactId = await resolveContactXrm(payload);
       const r = await callActionXrm(payload, contactId);
       if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
       bindCustomerLater(payload, contactId);
@@ -826,15 +838,13 @@ form.addEventListener("submit", async (e) => {
          authenticated user). Fall back to the public Flow trigger URL only
          if the action call fails AND a flow URL is configured. */
       let restErr = null;
-      if (CONFIG.proactiveEngagementConfigId){
-        try {
-          const contactId = await resolveContactRest(payload);
-          const r = await callActionRest(payload, contactId);
-          if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
-          showSuccess(payload);
-          return;
-        } catch(e){ restErr = e; console.warn("[cbk] REST action failed, will try flow URL", e); }
-      }
+      try {
+        if (!contactId) contactId = await resolveContactRest(payload);
+        const r = await callActionRest(payload, contactId);
+        if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
+        showSuccess(payload);
+        return;
+      } catch(e){ restErr = e; console.warn("[cbk] REST action failed, will try flow URL", e); }
       if (CONFIG.flowTriggerUrl){
         const resp = await fetch(CONFIG.flowTriggerUrl, {
           method: "POST", headers: {"Content-Type":"application/json"},
@@ -857,6 +867,16 @@ form.addEventListener("submit", async (e) => {
 function showSuccess(p){
   const stage = document.createElement("div");
   stage.className = "success-stage";
+  const closeX = document.createElement("button");
+  closeX.type = "button"; closeX.setAttribute("aria-label","Close"); closeX.title = "Close";
+  closeX.innerHTML = "&times;";
+  closeX.style.cssText = "position:absolute;top:18px;right:22px;width:40px;height:40px;border-radius:50%;border:1px solid rgba(0,0,0,.12);background:#fff;color:#0b1020;font:600 24px/1 system-ui,Segoe UI,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:100001";
+  closeX.addEventListener("click", function(){
+    var here=location.href, fb=here.replace(/webresourceName=[^&]+/i,"webresourceName=cbk_setup.html");
+    try{ if(window.history.length>1){ var b=location.href; history.back(); setTimeout(function(){ if(location.href===b) location.href=fb; },400); return; } }catch(e){}
+    location.href=fb;
+  });
+  stage.appendChild(closeX);
   const card = document.createElement("section");
   card.className = "success";
   const dateStr = dateLongFmt.format(state.date);
@@ -1110,17 +1130,19 @@ function slotIsFull(startDate){
   return (CONFIG.bookedCounts.get(k) || 0) >= CONFIG.maxCallsPerSlot;
 }
 
-async function findCustomerActiveDelivery(phoneE164){
+async function findCustomerActiveDelivery(contactId, phoneE164ForDisplay){
+  if (!contactId) return null;
   try {
     const cfgId = CONFIG.proactiveEngagementConfigId;
     const fromIso = new Date(Date.now() - 60000).toISOString();
-    const phoneEsc = String(phoneE164).replace(/'/g, "''");
-    let f = "msdyn_to_address eq '" + phoneEsc + "' and (msdyn_status eq null or msdyn_status ne 'Cancelled') and msdyn_window_start_date ge " + fromIso;
+    /* Filter by contact id (msdyn_to_address is ALWAYS NULL on delivery rows). */
+    let f = "msdyn_contact_id eq '" + contactId + "' and msdyn_window_start_date ge " + fromIso
+          + " and (msdyn_status eq null or (msdyn_status ne 'Cancelled' and msdyn_status ne 'Canceled' and msdyn_status ne 'Complete' and msdyn_status ne 'Completed' and msdyn_status ne 'Failed' and msdyn_status ne 'Expired'))";
     if (cfgId) f += " and msdyn_proactive_engagement_config_id eq '" + cfgId + "'";
-    const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_proactive_deliveryid,msdyn_window_start_date,msdyn_window_end_date,msdyn_to_address&$filter=" + encodeURIComponent(f) + "&$orderby=msdyn_window_start_date asc&$top=1");
+    const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_proactive_deliveryid,msdyn_window_start_date,msdyn_window_end_date,msdyn_contact_id,msdyn_to_address,msdyn_status&$filter=" + encodeURIComponent(f) + "&$orderby=msdyn_window_start_date asc&$top=1");
     if (r.value && r.value.length){
       const d = r.value[0];
-      return { id: d.msdyn_proactive_deliveryid, start: new Date(d.msdyn_window_start_date), end: new Date(d.msdyn_window_end_date), phone: d.msdyn_to_address };
+      return { id: d.msdyn_proactive_deliveryid, start: new Date(d.msdyn_window_start_date), end: new Date(d.msdyn_window_end_date), phone: d.msdyn_to_address || phoneE164ForDisplay || "" };
     }
   } catch(e){ console.warn("[cbk] findCustomerActiveDelivery failed", e); }
   return null;

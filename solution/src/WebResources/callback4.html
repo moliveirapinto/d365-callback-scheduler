@@ -39,7 +39,7 @@
   /* ── Top rule + brand ─────────────────────────────
      Swiss-style tight header with a thick top hairline */
   .topwrap{border-top:4px solid var(--ink);padding-top:18px;padding-bottom:18px;border-bottom:var(--bw) solid var(--rule)}
-  .top{display:grid;grid-template-columns:1fr auto;align-items:center;gap:18px}
+  .top{display:flex;justify-content:flex-end;align-items:center;gap:18px}
   .brand{display:inline-flex;align-items:baseline;gap:14px}
   .brand .mark{
     font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-3);
@@ -939,7 +939,8 @@ async function initWorkstreamPicker(){
     status.className = "ws-status err"; status.textContent = "!";
     status.title = "Load failed: " + (e.message || e);
   }
-}
+}
+
 </script>
 </body>
 </html>

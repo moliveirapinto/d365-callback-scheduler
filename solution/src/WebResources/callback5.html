@@ -55,7 +55,7 @@
 
   /* ── Top bar ─────────────────────────────────────── */
   .top{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    display:flex;align-items:center;justify-content:flex-end;gap:12px;
     background:var(--cream-2);border:1px solid var(--line);box-shadow:var(--shadow-sm);
     padding:14px 20px;margin-bottom:28px;border-radius:var(--r-pill);flex-wrap:wrap;
   }
@@ -997,7 +997,8 @@ async function initWorkstreamPicker(){
     status.className = "ws-status err"; status.textContent = "!";
     status.title = "Load failed: " + (e.message || e);
   }
-}
+}
+
 </script>
 </body>
 </html>

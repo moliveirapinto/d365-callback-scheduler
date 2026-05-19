@@ -510,6 +510,46 @@ function loadConfigStandalone(){
   CONFIG.allowMultipleBookings       = (url.searchParams.get("multi") || "yes").toLowerCase() !== "no";
 }
 
+/* When the standalone page is loaded by an authenticated user (cookie session
+   to the same org - e.g. admin testing, or a customer who happens to be logged
+   in), pull live env-var values so admin changes are reflected without needing
+   query-string params. Falls back silently for truly anonymous visitors. */
+async function loadConfigFromEnvVarsCookie(){
+  try {
+    const base = (window.location.origin || "").replace(/\/+$/,"") + "/api/data/v9.2";
+    const r = await fetch(base + "/environmentvariabledefinitions"
+      + "?$select=schemaname,defaultvalue"
+      + "&$filter=startswith(schemaname,'cbk_')"
+      + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=value)",
+      { credentials: "include", headers: { Accept: "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" } });
+    if (!r.ok) return false;
+    const j = await r.json();
+    const map = {};
+    for (const d of j.value){
+      const v = d["environmentvariabledefinition_environmentvariablevalue"];
+      map[d.schemaname] = (v && v.length) ? v[0].value : d.defaultvalue;
+    }
+    const num = (k, fb) => { const x = parseInt(map[k], 10); return isFinite(x) ? x : fb; };
+    CONFIG.hourStart            = num("cbk_HourStart",     CONFIG.hourStart);
+    CONFIG.hourEnd              = num("cbk_HourEnd",       CONFIG.hourEnd);
+    CONFIG.slotMinutes          = num("cbk_SlotMinutes",   CONFIG.slotMinutes);
+    CONFIG.daysAhead            = num("cbk_DaysAhead",     CONFIG.daysAhead);
+    CONFIG.maxCallsPerSlot      = num("cbk_MaxCallsPerSlot", CONFIG.maxCallsPerSlot);
+    CONFIG.allowMultipleBookings = String(map["cbk_AllowMultipleBookings"] || "Yes").toLowerCase() !== "no";
+    if (!CONFIG.proactiveEngagementConfigId) {
+      CONFIG.proactiveEngagementConfigId = (map["cbk_ProactiveEngagementConfigId"] || "").trim() || null;
+    }
+    if (!CONFIG.flowTriggerUrl) {
+      CONFIG.flowTriggerUrl = (map["cbk_FlowTriggerUrl"] || "").trim() || null;
+    }
+    console.log("[cbk] applied live env vars (slot=" + CONFIG.slotMinutes + " min)");
+    return true;
+  } catch(e){
+    console.warn("[cbk] env var fetch failed (expected for anonymous users)", e);
+    return false;
+  }
+}
+
 async function resolveContactXrm(p){
   const esc = s => String(s).replace(/'/g, "''");
   const clauses = [];
@@ -857,6 +897,7 @@ async function loadTopicOptions(){
       footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
     } else {
       loadConfigStandalone();
+      await loadConfigFromEnvVarsCookie();
       footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "";
     }
   } catch(e){

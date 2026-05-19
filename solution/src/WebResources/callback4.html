@@ -823,7 +823,6 @@ function showSuccess(p){
       try{ if(window.history.length>1){ var b=location.href; history.back(); setTimeout(function(){ if(location.href===b) location.href=fb; },400); return; } }catch(e){}
       location.href=fb;
     });
-    card.appendChild(closeX);
   const dateStr = dateLongFmt.format(state.date);
   const timeStr = `${timeFmt.format(state.slot.start)} \u2013 ${timeFmt.format(state.slot.end)}`;
   card.innerHTML = `
@@ -842,6 +841,7 @@ function showSuccess(p){
       <li>Our system will dial you within your chosen window.</li>
       <li>If we miss you, we'll try once more.</li>
     </ul></div>`;
+  card.appendChild(closeX); /* AFTER innerHTML so it doesn't get wiped out */
   stage.appendChild(card);
   document.body.appendChild(stage);
   document.querySelector(".mobile-cta").style.display = "none";

@@ -881,7 +881,7 @@ async function loadBookedCounts(){
   try {
     const cfgId = CONFIG.proactiveEngagementConfigId; if (!cfgId) return;
     const fromIso = new Date(Date.now() - 60000).toISOString();
-    const f = "msdyn_proactive_engagement_config_id eq '" + cfgId + "' and statecode eq 0 and msdyn_window_start_date ge " + fromIso;
+    const f = "msdyn_proactive_engagement_config_id eq '" + cfgId + "' and (msdyn_status eq null or msdyn_status ne 'Cancelled') and msdyn_window_start_date ge " + fromIso;
     const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_window_start_date&$filter=" + encodeURIComponent(f) + "&$top=500");
     for (const d of (r.value || [])){
       const k = _bucketKey(d.msdyn_window_start_date);
@@ -901,7 +901,7 @@ async function findCustomerActiveDelivery(phoneE164){
     const cfgId = CONFIG.proactiveEngagementConfigId;
     const fromIso = new Date(Date.now() - 60000).toISOString();
     const phoneEsc = String(phoneE164).replace(/'/g, "''");
-    let f = "msdyn_to_address eq '" + phoneEsc + "' and statecode eq 0 and msdyn_window_start_date ge " + fromIso;
+    let f = "msdyn_to_address eq '" + phoneEsc + "' and (msdyn_status eq null or msdyn_status ne 'Cancelled') and msdyn_window_start_date ge " + fromIso;
     if (cfgId) f += " and msdyn_proactive_engagement_config_id eq '" + cfgId + "'";
     const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_proactive_deliveryid,msdyn_window_start_date,msdyn_window_end_date,msdyn_to_address&$filter=" + encodeURIComponent(f) + "&$orderby=msdyn_window_start_date asc&$top=1");
     if (r.value && r.value.length){
@@ -915,7 +915,7 @@ async function cancelDelivery(id){
   const r = await fetch(_apiBase() + "/msdyn_proactive_deliveries(" + id + ")", {
     method: "PATCH", credentials: "include",
     headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },
-    body: JSON.stringify({ statecode: 1, statuscode: 2 })
+    body: JSON.stringify({ msdyn_status: "Cancelled", msdyn_state: "Cancelled" })
   });
   if (!r.ok) throw new Error("Cancel HTTP " + r.status);
 }

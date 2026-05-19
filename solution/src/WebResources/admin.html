@@ -562,7 +562,7 @@ async function loadDashboard(){
     const j = await api("/msdyn_proactive_deliveries"
       + "?$select=msdyn_proactive_deliveryid,msdyn_to_address,msdyn_from_address,msdyn_contact_id,"
       + "msdyn_proactive_engagement_config_id,msdyn_window_start_date,msdyn_window_end_date,"
-      + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon,statecode,statuscode"
+      + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon"
       + "&$orderby=msdyn_window_start_date desc&$top=500");
     dashRows = j.value;
     /* enrich engagement config name */
@@ -587,11 +587,12 @@ async function loadDashboard(){
 function classifyRow(r){
   const s = (r.msdyn_status || "").toLowerCase();
   const st = (r.msdyn_state || "").toLowerCase();
-  const stcode = r.statecode;
-  if (stcode === 1) return "cancelled";
+  if (s === "cancelled" || s === "canceled" || st === "cancelled" || st === "canceled") return "cancelled";
   if (s === "complete" || s === "completed") return "complete";
-  if (s === "failed" || s === "cancelled" || s === "canceled" || s === "expired") return "failed";
-  if (s === "waiting" || s === "scheduled" || s === "queued" || s === "inprogress" || s === "in progress" || st === "scheduled") return "waiting";
+  if (s === "failed" || s === "expired") return "failed";
+  if (s === "waiting" || s === "scheduled" || s === "queued" || s === "inprogress" || s === "in progress" || s === "pending" || st === "scheduled") return "waiting";
+  /* no status set yet = freshly created, treat as waiting */
+  if (!s && !st) return "waiting";
   return "other";
 }
 
@@ -668,11 +669,11 @@ document.addEventListener("click", async (e) => {
   b.disabled = true; b.textContent = "Cancelling...";
   try {
     await api("/msdyn_proactive_deliveries(" + id + ")", {
-      method: "PATCH", body: JSON.stringify({ statecode: 1, statuscode: 2 })
+      method: "PATCH", body: JSON.stringify({ msdyn_status: "Cancelled", msdyn_state: "Cancelled" })
     });
     /* refresh row */
     const r = dashRows.find(x => x.msdyn_proactive_deliveryid === id);
-    if (r){ r.statecode = 1; r.msdyn_status = "Cancelled"; }
+    if (r){ r.msdyn_status = "Cancelled"; r.msdyn_state = "Cancelled"; }
     renderKpis(); renderDashboard();
   } catch(err){
     alert("Cancel failed: " + err.message);

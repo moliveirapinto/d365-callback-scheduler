@@ -342,25 +342,25 @@
   @keyframes wsspin{to{transform:rotate(360deg)}}
 
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* cbk modal (duplicate-booking guard) + full-slot marker */
+.cbk-modal-back{position:fixed;inset:0;background:rgba(11,16,32,.55);display:flex;align-items:center;justify-content:center;z-index:9999;animation:cbkfade .15s ease-out}
+.cbk-modal{background:#fff;max-width:480px;width:calc(100% - 32px);padding:28px;border-radius:18px;box-shadow:0 30px 80px -20px rgba(11,16,32,.4);font-family:inherit;color:#0b1020}
+.cbk-modal h3{margin:0 0 10px;font-size:22px;font-weight:800;letter-spacing:-.01em}
+.cbk-modal p{margin:0 0 12px;line-height:1.55;color:#5b6075}
+.cbk-modal-summary{background:#f5f7fb;padding:14px;border-radius:12px;margin:0 0 16px;font-size:14px;line-height:1.5}
+.cbk-modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+.cbk-btn{padding:10px 16px;border-radius:10px;border:0;cursor:pointer;font-weight:700;font-size:14px;font-family:inherit}
+.cbk-btn-ghost{background:#fff;border:1px solid rgba(11,16,32,.18);color:#0b1020}
+.cbk-btn-danger{background:linear-gradient(135deg,#c43054,#7a1f37);color:#fff}
+.cbk-slot-full{position:relative;opacity:.55}
+.cbk-slot-full::after{content:"full";position:absolute;top:-6px;right:-6px;background:#c43054;color:#fff;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:8px;box-shadow:0 2px 6px rgba(196,48,84,.4)}
+@keyframes cbkfade{from{opacity:0}to{opacity:1}}
 </style>
 </head>
 <body>
 <div class="shell">
   <header class="top glass">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="ws-pill" data-open="false">
-        <svg class="ws-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        <span class="ws-label">Workstream</span>
-        <button type="button" class="ws-trigger" id="wsTrigger" aria-haspopup="listbox" aria-expanded="false">
-          <span class="ws-current" id="wsCurrent">Loading...</span>
-          <svg class="ws-caret" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
-        </button>
-        <span id="wsStatus" class="ws-status" aria-live="polite"></span>
-        <div class="ws-menu" id="wsMenu" role="listbox" hidden>
-          <div class="ws-menu-head">Pick a workstream</div>
-          <div id="wsMenuInner"></div>
-        </div>
-      </div>
       <div class="pill glass-2"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
     </div>
   </header>
@@ -496,6 +496,8 @@ async function loadConfigFromXrm(){
   CONFIG.hourEnd                     = num("cbk_HourEnd",    DEFAULTS.hourEnd);
   CONFIG.slotMinutes                 = num("cbk_SlotMinutes",DEFAULTS.slotMinutes);
   CONFIG.daysAhead                   = num("cbk_DaysAhead",  DEFAULTS.daysAhead);
+  CONFIG.maxCallsPerSlot             = num("cbk_MaxCallsPerSlot", 5);
+  CONFIG.allowMultipleBookings       = String(map["cbk_AllowMultipleBookings"] || "Yes").toLowerCase() !== "no";
   if (!CONFIG.proactiveEngagementConfigId) {
     try {
       const c = await XRM.WebApi.retrieveMultipleRecords(
@@ -518,6 +520,8 @@ function loadConfigStandalone(){
   CONFIG.hourEnd                     = parseInt(url.searchParams.get("h1"), 10) || DEFAULTS.hourEnd;
   CONFIG.slotMinutes                 = parseInt(url.searchParams.get("slot"), 10) || DEFAULTS.slotMinutes;
   CONFIG.daysAhead                   = parseInt(url.searchParams.get("days"), 10) || DEFAULTS.daysAhead;
+  CONFIG.maxCallsPerSlot             = parseInt(url.searchParams.get("max"), 10) || 5;
+  CONFIG.allowMultipleBookings       = (url.searchParams.get("multi") || "yes").toLowerCase() !== "no";
 }
 
 async function resolveContactXrm(p){
@@ -650,11 +654,15 @@ const startOfLocalDay = d => { const x = new Date(d); x.setHours(0,0,0,0); retur
 function dayHasAvailableSlot(d){
   const minTime = new Date();
   const stepMs = CONFIG.slotMinutes*60000;
-  const dayStart = new Date(d); dayStart.setHours(CONFIG.hourStart,0,0,0);
-  const dayEnd   = new Date(d); dayEnd.setHours(CONFIG.hourEnd,0,0,0);
+  const win = getDayWindow(d);
+  if (!win) return false;
+  const dayStart = new Date(d); dayStart.setHours(0,0,0,0); dayStart.setTime(dayStart.getTime() + win.openMin*60000);
+  const dayEnd   = new Date(d); dayEnd.setHours(0,0,0,0);   dayEnd.setTime(dayEnd.getTime()   + win.closeMin*60000);
   for (let t = dayStart.getTime(); t < dayEnd.getTime(); t += stepMs) {
     if (new Date(t + stepMs) > minTime) return true;
   }
+  return false;
+}
   return false;
 }
 function buildDays(){
@@ -682,18 +690,30 @@ function buildSlots(){
   slotsHost.innerHTML = "";
   const minTime = new Date();
   const stepMs = CONFIG.slotMinutes*60000;
-  const groups = [{label:"Morning",from:CONFIG.hourStart,to:12},{label:"Afternoon",from:12,to:CONFIG.hourEnd}];
+  const win = getDayWindow(state.date);
+  if (!win) {
+    const empty = document.createElement("div");
+    empty.className = "slot-section";
+    empty.innerHTML = '<div class="slot-label">Closed</div><p style="color:var(--muted,#5b6075);font-size:14px;margin:8px 0 0">We are closed on this day. Please pick another date.</p>';
+    slotsHost.appendChild(empty); return;
+  }
+  const noonMin = 12*60;
+  const groups = [
+    { label: "Morning",   from: win.openMin,                 to: Math.min(noonMin, win.closeMin) },
+    { label: "Afternoon", from: Math.max(noonMin, win.openMin), to: win.closeMin }
+  ].filter(g => g.from < g.to);
   for (const g of groups){
     const section = document.createElement("div"); section.className = "slot-section";
     const label = document.createElement("div"); label.className = "slot-label"; label.textContent = g.label; section.appendChild(label);
     const grid = document.createElement("div"); grid.className = "slots";
-    const a = new Date(state.date); a.setHours(g.from,0,0,0);
-    const b = new Date(state.date); b.setHours(g.to,0,0,0);
+    const a = new Date(state.date); a.setHours(0,0,0,0); a.setTime(a.getTime() + g.from*60000);
+    const b = new Date(state.date); b.setHours(0,0,0,0); b.setTime(b.getTime() + g.to*60000);
     for (let t = a.getTime(); t < b.getTime(); t += stepMs){
       const start = new Date(t), end = new Date(t+stepMs);
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "slot";
       btn.innerHTML = `${timeFmt.format(start)}<small>to ${timeFmt.format(end)}</small>`;
-      if (end <= minTime) btn.disabled = true;
+      if (end <= minTime) { btn.disabled = true; }
+      else if (slotIsFull(start)) { btn.disabled = true; btn.classList.add("cbk-slot-full"); btn.title = "Fully booked"; }
       else btn.addEventListener("click", () => {
         state.slot = {start,end};
         for (const s of slotsHost.querySelectorAll(".slot")) s.classList.remove("is-selected");
@@ -753,6 +773,14 @@ form.addEventListener("submit", async (e) => {
   try {
     if (MODE === "AGENT") {
       if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
+      if (CONFIG.allowMultipleBookings === false) {
+        const existing = await findCustomerActiveDelivery(phoneE164);
+        if (existing) {
+          const act = await showExistingBookingModal(existing);
+          if (act !== "cancel") { fail("Existing callback kept. Nothing changed."); submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback"; submitting = false; return; }
+          await cancelDelivery(existing.id);
+        }
+      }
       const contactId = await resolveContactXrm(payload);
       const r = await callActionXrm(payload, contactId);
       if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");
@@ -849,168 +877,148 @@ async function loadTopicOptions(){
     console.error("[cbk] init failed", e);
   }
   await loadTopicOptions();
+  await loadOperatingHours();
+  await loadBookedCounts();
   buildDays(); updatePass();
   tickLiveWait(); setInterval(tickLiveWait, 30000);
-    initWorkstreamPicker();
+  
   })();
 
 /* ============================================================================
-   Workstream picker — replaces the old setup page. Same-origin OData fallback
-   when Xrm isn't present (e.g. /WebResources/... preview).
+   Enforcement: operating hours, slot capacity, duplicate-booking guard.
+   The workstream picker was moved to /WebResources/cbk_admin.html.
    ============================================================================ */
-async function loadWorkstreams(){
-  if (XRM){
-    const r = await XRM.WebApi.retrieveMultipleRecords(
-      "msdyn_proactive_engagement_config",
-      "?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc"
-    );
-    return r.entities.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
-  }
-  const url = `${window.location.origin}/api/data/v9.2/msdyn_proactive_engagement_configs`
-            + `?$select=msdyn_proactive_engagement_configid,msdyn_name&$top=50&$orderby=msdyn_name asc`;
-  const r = await fetch(url, { credentials:"include",
-    headers:{ Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" } });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  const j = await r.json();
-  return j.value.map(e => ({ id: e.msdyn_proactive_engagement_configid, name: e.msdyn_name }));
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function _apiBase(){
+  return (CONFIG.orgUrl || window.location.origin).replace(/\/+$/, "") + "/api/data/v9.2";
 }
-
-async function saveWorkstream(id){
-  // Locate the env var def + existing value (works through both code paths).
-  if (XRM){
-    const def = await XRM.WebApi.retrieveMultipleRecords(
-      "environmentvariabledefinition",
-      "?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'"
-      + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)"
-    );
-    if (!def.entities.length) throw new Error("env var def not found");
-    const d = def.entities[0];
-    const existing = d.environmentvariabledefinition_environmentvariablevalue;
-    if (existing && existing.length){
-      await XRM.WebApi.updateRecord("environmentvariablevalue", existing[0].environmentvariablevalueid, { value: String(id) });
-    } else {
-      await XRM.WebApi.createRecord("environmentvariablevalue", {
-        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
-        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
-      });
-    }
-    return;
-  }
-  const base = `${window.location.origin}/api/data/v9.2`;
-  const h = { Accept:"application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0", "Content-Type":"application/json" };
-  const dResp = await fetch(`${base}/environmentvariabledefinitions`
-      + `?$select=environmentvariabledefinitionid&$filter=schemaname eq 'cbk_ProactiveEngagementConfigId'`
-      + `&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid)`,
-      { credentials:"include", headers:h });
-  if (!dResp.ok) throw new Error("def lookup HTTP " + dResp.status);
-  const dJson = await dResp.json();
-  if (!dJson.value.length) throw new Error("env var def not found");
-  const d = dJson.value[0];
-  const existing = d.environmentvariabledefinition_environmentvariablevalue;
-  if (existing && existing.length){
-    const r = await fetch(`${base}/environmentvariablevalues(${existing[0].environmentvariablevalueid})`,
-      { method:"PATCH", credentials:"include", headers:h, body: JSON.stringify({ value: String(id) }) });
-    if (!r.ok) throw new Error("PATCH HTTP " + r.status);
-  } else {
-    const r = await fetch(`${base}/environmentvariablevalues`, {
-      method:"POST", credentials:"include", headers:h,
-      body: JSON.stringify({
-        "EnvironmentVariableDefinitionId@odata.bind": `/environmentvariabledefinitions(${d.environmentvariabledefinitionid})`,
-        value: String(id), schemaname: "cbk_ProactiveEngagementConfigId_value"
-      })
-    });
-    if (!r.ok) throw new Error("POST HTTP " + r.status);
-  }
-}
-
-async function initWorkstreamPicker(){
-  const pill    = document.querySelector(".ws-pill");
-  const trigger = document.getElementById("wsTrigger");
-  const menu    = document.getElementById("wsMenu");
-  const inner   = document.getElementById("wsMenuInner");
-  const current = document.getElementById("wsCurrent");
-  const status  = document.getElementById("wsStatus");
-  if (!pill || !trigger || !menu) return;
-
-  let items = [];
-  let selectedId = null;
-
-  const setCurrent = name => { current.textContent = name || "Pick one…"; };
-  const open  = () => { pill.dataset.open = "true";  trigger.setAttribute("aria-expanded","true");  menu.hidden = false;
-    setTimeout(() => { (inner.querySelector(".ws-item.is-selected") || inner.querySelector(".ws-item"))?.focus(); }, 0); };
-  const close = () => { pill.dataset.open = "false"; trigger.setAttribute("aria-expanded","false"); menu.hidden = true; };
-  const toggle = () => menu.hidden ? open() : close();
-
-  function renderMenu(){
-    inner.innerHTML = "";
-    if (!items.length){
-      const e = document.createElement("div");
-      e.className = "ws-menu-empty";
-      e.textContent = "No workstreams found in this org.";
-      inner.appendChild(e); return;
-    }
-    for (const w of items){
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "ws-item" + (w.id === selectedId ? " is-selected" : "");
-      b.setAttribute("role","option");
-      b.setAttribute("aria-selected", w.id === selectedId ? "true" : "false");
-      b.dataset.id = w.id;
-      const nameSpan = document.createElement("span"); nameSpan.className = "ws-name"; nameSpan.textContent = w.name || "(unnamed)";
-      const tick = document.createElementNS("http://www.w3.org/2000/svg","svg");
-      tick.setAttribute("class","ws-tick"); tick.setAttribute("viewBox","0 0 24 24"); tick.setAttribute("fill","none"); tick.setAttribute("stroke","currentColor"); tick.setAttribute("stroke-width","2.6"); tick.setAttribute("stroke-linecap","round"); tick.setAttribute("stroke-linejoin","round");
-      tick.innerHTML = '<path d="M5 12l5 5L20 7"/>';
-      b.appendChild(nameSpan); b.appendChild(tick);
-      b.addEventListener("click", () => onPick(w));
-      inner.appendChild(b);
-    }
-  }
-
-  async function onPick(w){
-    if (w.id === selectedId){ close(); return; }
-    close();
-    status.className = "ws-status spin"; status.textContent = "·";
-    try {
-      await saveWorkstream(w.id);
-      selectedId = w.id;
-      CONFIG.proactiveEngagementConfigId = w.id;
-      setCurrent(w.name); renderMenu();
-      status.className = "ws-status"; status.textContent = "\u2713";
-      status.title = "Saved";
-      setTimeout(() => { status.textContent = ""; status.title = ""; }, 1800);
-    } catch(e){
-      status.className = "ws-status err"; status.textContent = "!";
-      status.title = "Save failed: " + (e.message || e);
-    }
-  }
-
-  trigger.addEventListener("click", e => { e.stopPropagation(); toggle(); });
-  document.addEventListener("click", e => { if (!pill.contains(e.target)) close(); });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !menu.hidden){ close(); trigger.focus(); return; }
-    if (menu.hidden) return;
-    const els = Array.from(inner.querySelectorAll(".ws-item"));
-    const i = els.indexOf(document.activeElement);
-    if (e.key === "ArrowDown"){ e.preventDefault(); (els[i+1] || els[0])?.focus(); }
-    if (e.key === "ArrowUp"){   e.preventDefault(); (els[i-1] || els[els.length-1])?.focus(); }
+async function _apiGet(rel){
+  const r = await fetch(_apiBase() + rel, {
+    credentials: "include",
+    headers: { Accept: "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" }
   });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+function _hhmmToMin(s){ const p = String(s||"").split(":"); return (+p[0]||0)*60 + (+p[1]||0); }
+function _bucketKey(iso){
+  const t = new Date(iso).getTime();
+  const step = (CONFIG.slotMinutes || 30) * 60000;
+  return String(Math.floor(t / step) * step);
+}
 
+async function loadOperatingHours(){
+  CONFIG.opHours = { schedule: null, alwaysOpen: true };
   try {
-    items = await loadWorkstreams();
-    if (!items.length){ setCurrent("None configured"); renderMenu(); return; }
-    selectedId = CONFIG.proactiveEngagementConfigId;
-    let match = items.find(w => w.id === selectedId);
-    if (!match && items.length === 1){
-      match = items[0];
-      try { await saveWorkstream(match.id); CONFIG.proactiveEngagementConfigId = match.id; selectedId = match.id; } catch(_){}
+    const cfgId = CONFIG.proactiveEngagementConfigId; if (!cfgId) return;
+    const cfg = await _apiGet("/msdyn_proactive_engagement_configs(" + cfgId + ")?$select=_msdyn_queue_value");
+    const qId = cfg && cfg._msdyn_queue_value; if (!qId) return;
+    const q = await _apiGet("/queues(" + qId + ")?$select=_msdyn_operatinghourid_value");
+    const ohId = q && q._msdyn_operatinghourid_value; if (!ohId) return;
+    const oh = await _apiGet("/msdyn_operatinghours(" + ohId + ")?$select=msdyn_enablealldays,msdyn_starttimestring,msdyn_endtimestring,msdyn_calendarid");
+    const sched = {};
+    if (oh.msdyn_enablealldays){
+      const win = { openMin: _hhmmToMin(oh.msdyn_starttimestring || "00:00"), closeMin: _hhmmToMin(oh.msdyn_endtimestring || "24:00") };
+      for (let i=0;i<7;i++) sched[i] = win;
+      CONFIG.opHours = { schedule: sched, alwaysOpen: false }; return;
     }
-    setCurrent(match ? match.name : "Pick one…");
-    renderMenu();
-  } catch(e){
-    setCurrent("(load failed)");
-    status.className = "ws-status err"; status.textContent = "!";
-    status.title = "Load failed: " + (e.message || e);
-  }
+    if (oh.msdyn_calendarid){
+      const cal = await _apiGet("/calendars(" + oh.msdyn_calendarid + ")?$expand=calendar_calendar_rules($select=duration,starttime,pattern)");
+      const rules = (cal && cal.calendar_calendar_rules) || [];
+      const map = { SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6 };
+      for (const r of rules){
+        if (!r.pattern || !r.starttime || !r.duration) continue;
+        const open = _hhmmToMin(r.starttime), close = open + r.duration;
+        const m = /BYDAY=([A-Z,]+)/.exec(r.pattern);
+        const days = m ? m[1].split(",") : ["SU","MO","TU","WE","TH","FR","SA"];
+        for (const d of days){ const i = map[d]; if (i != null) sched[i] = { openMin: open, closeMin: close }; }
+      }
+      if (Object.keys(sched).length){ CONFIG.opHours = { schedule: sched, alwaysOpen: false }; return; }
+    }
+    if (oh.msdyn_starttimestring && oh.msdyn_endtimestring){
+      const win = { openMin: _hhmmToMin(oh.msdyn_starttimestring), closeMin: _hhmmToMin(oh.msdyn_endtimestring) };
+      for (let i=1;i<=5;i++) sched[i] = win;
+      CONFIG.opHours = { schedule: sched, alwaysOpen: false };
+    }
+  } catch(e){ console.warn("[cbk] loadOperatingHours failed", e); }
+}
+function getDayWindow(d){
+  if (!CONFIG.opHours || CONFIG.opHours.alwaysOpen) return { openMin: 0, closeMin: 24*60 };
+  return (CONFIG.opHours.schedule && CONFIG.opHours.schedule[d.getDay()]) || null;
+}
+
+async function loadBookedCounts(){
+  CONFIG.bookedCounts = new Map();
+  try {
+    const cfgId = CONFIG.proactiveEngagementConfigId; if (!cfgId) return;
+    const fromIso = new Date(Date.now() - 60000).toISOString();
+    const f = "msdyn_proactive_engagement_config_id eq '" + cfgId + "' and statecode eq 0 and msdyn_window_start_date ge " + fromIso;
+    const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_window_start_date&$filter=" + encodeURIComponent(f) + "&$top=500");
+    for (const d of (r.value || [])){
+      const k = _bucketKey(d.msdyn_window_start_date);
+      CONFIG.bookedCounts.set(k, (CONFIG.bookedCounts.get(k) || 0) + 1);
+    }
+  } catch(e){ console.warn("[cbk] loadBookedCounts failed", e); }
+}
+function slotIsFull(startDate){
+  if (!CONFIG.maxCallsPerSlot || CONFIG.maxCallsPerSlot <= 0) return false;
+  if (!CONFIG.bookedCounts) return false;
+  const k = _bucketKey(startDate.toISOString());
+  return (CONFIG.bookedCounts.get(k) || 0) >= CONFIG.maxCallsPerSlot;
+}
+
+async function findCustomerActiveDelivery(phoneE164){
+  try {
+    const cfgId = CONFIG.proactiveEngagementConfigId;
+    const fromIso = new Date(Date.now() - 60000).toISOString();
+    const phoneEsc = String(phoneE164).replace(/'/g, "''");
+    let f = "msdyn_to_address eq '" + phoneEsc + "' and statecode eq 0 and msdyn_window_start_date ge " + fromIso;
+    if (cfgId) f += " and msdyn_proactive_engagement_config_id eq '" + cfgId + "'";
+    const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_proactive_deliveryid,msdyn_window_start_date,msdyn_window_end_date,msdyn_to_address&$filter=" + encodeURIComponent(f) + "&$orderby=msdyn_window_start_date asc&$top=1");
+    if (r.value && r.value.length){
+      const d = r.value[0];
+      return { id: d.msdyn_proactive_deliveryid, start: new Date(d.msdyn_window_start_date), end: new Date(d.msdyn_window_end_date), phone: d.msdyn_to_address };
+    }
+  } catch(e){ console.warn("[cbk] findCustomerActiveDelivery failed", e); }
+  return null;
+}
+async function cancelDelivery(id){
+  const r = await fetch(_apiBase() + "/msdyn_proactive_deliveries(" + id + ")", {
+    method: "PATCH", credentials: "include",
+    headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },
+    body: JSON.stringify({ statecode: 1, statuscode: 2 })
+  });
+  if (!r.ok) throw new Error("Cancel HTTP " + r.status);
+}
+function showExistingBookingModal(existing){
+  return new Promise(function(resolve){
+    const back = document.createElement("div"); back.className = "cbk-modal-back";
+    const dateF = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" });
+    const timeF = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+    back.innerHTML =
+      '<div class="cbk-modal" role="dialog" aria-modal="true">' +
+        '<h3>You already have a callback scheduled</h3>' +
+        '<p>We found an existing callback booked for <b>' + existing.phone + '</b>:</p>' +
+        '<div class="cbk-modal-summary">' +
+          '<div><b>' + dateF.format(existing.start) + '</b></div>' +
+          '<div>' + timeF.format(existing.start) + ' &ndash; ' + timeF.format(existing.end) + '</div>' +
+        '</div>' +
+        '<p>Cancel the existing one and book this new time, or keep the existing callback?</p>' +
+        '<div class="cbk-modal-actions">' +
+          '<button type="button" class="cbk-btn cbk-btn-ghost" data-act="keep">Keep existing</button>' +
+          '<button type="button" class="cbk-btn cbk-btn-danger" data-act="cancel">Cancel existing &amp; rebook</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(back);
+    back.addEventListener("click", function(e){
+      const b = e.target.closest("button[data-act]");
+      if (!b && e.target !== back) return;
+      const act = b ? b.dataset.act : "keep";
+      back.remove();
+      resolve(act);
+    });
+  });
 }
 
 </script>

@@ -1,0 +1,723 @@
+<!doctype html>
+<!--
+  Callback Scheduler - Admin console (web resource: cbk_admin.html)
+  AGENT mode only (must be opened inside a D365 model-driven app).
+
+  Configures:
+    - cbk_SlotMinutes              (15 / 30 / 45 / 60)
+    - cbk_ProactiveEngagementConfigId (workstream selector)
+    - cbk_MaxCallsPerSlot          (number, default 5)
+    - cbk_AllowMultipleBookings    ("Yes" / "No", default "Yes")
+
+  Shows:
+    - Operating hours panel (resolved from engagement_config -> queue -> msdyn_operatinghour)
+    - Callback dashboard (msdyn_proactive_delivery rows, upcoming / past / all)
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Callback Scheduler - Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#f5f7fb; --ink:#0b1020; --ink-2:#1a2040; --muted:#5b6075;
+    --line:rgba(11,16,32,.12); --line-2:rgba(11,16,32,.08);
+    --accent:#3b6cff; --accent-2:#7a4dff;
+    --good:#15a371; --warn:#c98a00; --bad:#c43054;
+    --shadow-lg:0 20px 50px -20px rgba(11,16,32,.18);
+    --shadow-sm:0 4px 14px -6px rgba(11,16,32,.12);
+    --radius:18px;
+    --serif:"Fraunces",ui-serif,Georgia,serif;
+    --sans:"Inter",ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);background:var(--bg);min-height:100dvh}
+  .shell{max-width:1280px;margin:0 auto;padding:24px 22px 80px}
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px;font-family:var(--serif);font-weight:700;font-size:22px;letter-spacing:-.01em}
+  .brand .dot{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent-2),var(--accent));box-shadow:0 6px 18px -6px rgba(59,108,255,.6)}
+  .env-chip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .env-chip .live{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px rgba(21,163,113,.16)}
+  h1.title{font-family:var(--serif);font-weight:900;font-size:clamp(28px,4vw,40px);margin:8px 0 6px;letter-spacing:-.02em}
+  p.lede{color:var(--muted);max-width:70ch;margin:0 0 22px;font-size:15px;line-height:1.55}
+
+  .grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:22px;align-items:start}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border-radius:var(--radius);border:1px solid var(--line-2);box-shadow:var(--shadow-lg);padding:clamp(18px,2.6vw,28px)}
+  .card+.card{margin-top:18px}
+  .card h2{font-family:var(--serif);font-weight:700;font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{appearance:none;cursor:pointer;border:0;padding:10px 18px;border-radius:10px;font-weight:700;background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;font-size:14px;display:inline-flex;align-items:center;gap:8px;transition:transform .12s ease, opacity .12s ease;box-shadow:0 8px 20px -10px rgba(11,16,32,.5)}
+  .btn:hover{transform:translateY(-1px)}
+  .btn.ghost{background:transparent;color:var(--ink);box-shadow:none;border:1px solid var(--line)}
+  .btn.danger{background:linear-gradient(135deg,#c43054,#7a1f37)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+  /* radio chips for slot duration */
+  .slotgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media (max-width:560px){.slotgrid{grid-template-columns:repeat(2,1fr)}}
+  .slotchip{position:relative;cursor:pointer;border:1.5px solid var(--line);background:#fff;border-radius:14px;padding:14px 10px;text-align:center;font-weight:700;font-size:15px;transition:border-color .12s ease, background .12s ease, color .12s ease, transform .12s ease}
+  .slotchip:hover{border-color:rgba(59,108,255,.5);transform:translateY(-1px)}
+  .slotchip input{position:absolute;opacity:0;pointer-events:none}
+  .slotchip.is-selected{background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;border-color:transparent;box-shadow:0 10px 24px -10px rgba(11,16,32,.45)}
+  .slotchip small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+  .slotchip.is-selected small{color:rgba(255,255,255,.7)}
+
+  /* form fields */
+  .field{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+  .field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .field input,.field select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;font:inherit;color:var(--ink);transition:border-color .12s ease, box-shadow .12s ease}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,108,255,.15)}
+  .field .help{font-size:12px;color:var(--muted)}
+
+  .toggle{display:flex;align-items:center;gap:14px;margin-top:14px;padding:14px;border:1px dashed var(--line);border-radius:12px;background:#fafbff}
+  .toggle .sw{position:relative;flex:0 0 auto;width:46px;height:26px;background:#d6d9e3;border-radius:999px;cursor:pointer;transition:background .15s ease}
+  .toggle .sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:transform .15s ease}
+  .toggle.is-on .sw{background:var(--accent)}
+  .toggle.is-on .sw::after{transform:translateX(20px)}
+  .toggle .t-text{flex:1;font-weight:600;font-size:14px}
+  .toggle .t-text small{display:block;color:var(--muted);font-weight:400;margin-top:2px;font-size:12px}
+
+  .status{margin-top:14px;font-size:13px;font-weight:600;min-height:18px;color:var(--good)}
+  .status.err{color:var(--bad)}
+  .status.warn{color:var(--warn)}
+
+  /* operating hours panel */
+  .info-panel{background:linear-gradient(180deg,#eef2ff 0%, #f6f8ff 100%);border:1px solid #dbe2ff;border-radius:14px;padding:16px;font-size:13px;line-height:1.55;color:#3b3f57;margin-top:14px}
+  .info-panel b{color:var(--ink)}
+  .hours-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+  .hours-table th,.hours-table td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line-2)}
+  .hours-table th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .hours-table .closed{color:var(--bad);font-weight:600}
+  .hours-table .open{color:var(--good);font-weight:600}
+  .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.04em;background:#eef2ff;color:var(--accent)}
+  .badge.alldays{background:#d6f5e6;color:var(--good)}
+  .badge.none{background:#ffe5ec;color:var(--bad)}
+
+  /* dashboard */
+  .dash-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--muted);font-weight:700;font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;transition:background .12s ease, color .12s ease}
+  .seg button.is-on{background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff}
+  .seg button:hover:not(.is-on){background:#f2f4fa}
+  .search{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+  .dash-count{font-size:12px;color:var(--muted);font-weight:600;margin-left:auto}
+
+  .dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  @media (max-width:720px){.dash-stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:#fff;border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow-sm)}
+  .stat .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .stat .val{font-family:var(--serif);font-weight:700;font-size:26px;margin-top:2px}
+  .stat.warn .val{color:var(--warn)}
+  .stat.good .val{color:var(--good)}
+  .stat.bad .val{color:var(--bad)}
+
+  .dash-table-wrap{overflow:auto;border:1px solid var(--line-2);border-radius:12px;background:#fff;max-height:540px}
+  table.dash{width:100%;border-collapse:collapse;font-size:13px}
+  table.dash thead th{position:sticky;top:0;background:#f5f7fb;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px;text-align:left;border-bottom:1px solid var(--line-2);z-index:2}
+  table.dash td{padding:10px;border-bottom:1px solid var(--line-2);vertical-align:top}
+  table.dash tr:hover td{background:#fafbff}
+  .stt{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em}
+  .stt.waiting{background:#fff4d6;color:#7a5a00}
+  .stt.complete{background:#d6f5e6;color:var(--good)}
+  .stt.cancelled{background:#ffe5ec;color:var(--bad)}
+  .stt.failed{background:#ffe5ec;color:var(--bad)}
+  .stt.other{background:#eef2ff;color:var(--accent)}
+  .when{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .cust{font-weight:600}
+  .cust small{display:block;color:var(--muted);font-weight:500;font-family:var(--sans)}
+  .empty-state{text-align:center;padding:48px 18px;color:var(--muted);font-size:14px}
+
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .nag{padding:14px 16px;border-radius:12px;border:1px solid #f3c1c1;background:#fff5f5;color:#7a1f37;font-weight:600;font-size:14px;margin-bottom:18px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="top">
+    <div class="brand"><div class="dot"></div>Callback Scheduler &middot; Admin</div>
+    <div class="env-chip" id="envChip"><span class="live"></span><span id="envText">Loading...</span></div>
+  </header>
+
+  <h1 class="title">Configure the scheduler</h1>
+  <p class="lede">Settings here drive every callback page (callback1-5). Operating hours are read live from the queue attached to the selected workstream. The dashboard below lists every proactive delivery in your environment.</p>
+
+  <div id="nag"></div>
+
+  <div class="grid">
+    <div>
+
+      <!-- ============== Slot duration ============== -->
+      <section class="card">
+        <h2>1. Time-slot length</h2>
+        <div class="sub">Every callback window will be exactly this long. Stored in env var <code>cbk_SlotMinutes</code>.</div>
+        <div class="slotgrid" id="slotGrid">
+          <label class="slotchip"><input type="radio" name="slot" value="15"><span>15</span><small>minutes</small></label>
+          <label class="slotchip"><input type="radio" name="slot" value="30"><span>30</span><small>minutes</small></label>
+          <label class="slotchip"><input type="radio" name="slot" value="45"><span>45</span><small>minutes</small></label>
+          <label class="slotchip"><input type="radio" name="slot" value="60"><span>1</span><small>hour</small></label>
+        </div>
+        <div class="status" id="slotStatus"></div>
+      </section>
+
+      <!-- ============== Workstream ============== -->
+      <section class="card">
+        <h2>2. Workstream</h2>
+        <div class="sub">Pick the proactive engagement config. Every booking is created against this workstream; its queue's operating hours define the bookable window. Stored in <code>cbk_ProactiveEngagementConfigId</code>.</div>
+        <div class="field">
+          <label for="wsSelect">Proactive engagement config</label>
+          <select id="wsSelect"><option>Loading...</option></select>
+          <div class="help" id="wsHelp">&nbsp;</div>
+        </div>
+        <div class="status" id="wsStatus"></div>
+      </section>
+
+      <!-- ============== Capacity ============== -->
+      <section class="card">
+        <h2>3. Capacity per slot</h2>
+        <div class="sub">When a window already has this many bookings, it disappears from the customer page. Stored in <code>cbk_MaxCallsPerSlot</code>.</div>
+        <div class="field" style="max-width:200px">
+          <label for="maxCalls">Max calls per slot</label>
+          <input type="number" id="maxCalls" min="1" max="999" step="1" value="5" />
+          <div class="help">Set to 1 if you only want one customer per window.</div>
+        </div>
+        <div class="status" id="maxStatus"></div>
+      </section>
+
+      <!-- ============== Multiple bookings ============== -->
+      <section class="card">
+        <h2>4. Multiple bookings per customer</h2>
+        <div class="sub">When OFF, a customer who tries to book a second callback is shown a modal with their existing booking and offered to cancel it or keep it. Stored in <code>cbk_AllowMultipleBookings</code>.</div>
+        <div class="toggle" id="multiToggle">
+          <div class="sw"></div>
+          <div class="t-text">Allow customers to schedule multiple callbacks
+            <small>If a customer already has an upcoming callback, a new attempt will trigger the duplicate dialog.</small>
+          </div>
+        </div>
+        <div class="status" id="multiStatus"></div>
+      </section>
+
+    </div>
+
+    <div>
+
+      <!-- ============== Operating hours ============== -->
+      <section class="card">
+        <h2>Operating hours</h2>
+        <div class="sub">Read directly from the queue attached to your selected workstream.</div>
+        <div id="hoursBody"><span class="spinner"></span>Loading...</div>
+        <div class="info-panel">
+          <b>How slots are generated.</b> The customer-facing pages look up the workstream you picked in step&nbsp;2, follow it to its queue, then read that queue's <i>Operating Hours</i> record. The day's first slot starts at the queue's <b>open time</b> and the last slot ends at the <b>close time</b> (in slot-length steps from step&nbsp;1). Days marked <b>Closed</b> are disabled. If the queue has no operating-hours record, the page falls back to 24/7 (slots from 00:00 to 23:59 every day).
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============== Dashboard ============== -->
+  <section class="card" style="margin-top:22px">
+    <h2>Callback dashboard</h2>
+    <div class="sub">Every <code>msdyn_proactive_delivery</code> in this environment. Filter by upcoming / past / all and search by phone, contact id, or status.</div>
+
+    <div class="dash-stats" id="dashStats">
+      <div class="stat"><div class="lbl">Upcoming</div><div class="val" id="kpiUpcoming">-</div></div>
+      <div class="stat good"><div class="lbl">Completed (24h)</div><div class="val" id="kpiCompleted">-</div></div>
+      <div class="stat warn"><div class="lbl">Waiting / in-flight</div><div class="val" id="kpiWaiting">-</div></div>
+      <div class="stat bad"><div class="lbl">Cancelled / failed</div><div class="val" id="kpiCancelled">-</div></div>
+    </div>
+
+    <div class="dash-tools">
+      <div class="seg" id="filterSeg">
+        <button data-f="upcoming" class="is-on">Upcoming</button>
+        <button data-f="past">Past</button>
+        <button data-f="all">All</button>
+      </div>
+      <input class="search" id="search" placeholder="Search phone, contact id, status..." />
+      <button class="btn ghost" id="refreshBtn">Refresh</button>
+      <span class="dash-count" id="dashCount"></span>
+    </div>
+
+    <div class="dash-table-wrap">
+      <table class="dash">
+        <thead><tr>
+          <th>Status</th><th>Window</th><th>Customer</th><th>Workstream</th><th>Result</th><th></th>
+        </tr></thead>
+        <tbody id="dashBody"><tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<!-- duplicate-callback modal scaffold (admin uses for cancel confirm) -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:rgba(11,16,32,.6);z-index:1000;align-items:center;justify-content:center;padding:18px">
+  <div style="background:#fff;border-radius:18px;max-width:480px;width:100%;padding:26px;box-shadow:var(--shadow-lg)">
+    <div id="modalBody"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px" id="modalActions"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   Bootstrap: must be in AGENT mode
+   ============================================================================ */
+function getXrm(){
+  try { if (window.parent && window.parent !== window && window.parent.Xrm) return window.parent.Xrm; } catch(e){}
+  try { if (window.Xrm) return window.Xrm; } catch(e){}
+  return null;
+}
+const XRM = getXrm();
+if (!XRM){
+  document.getElementById("nag").innerHTML =
+    '<div class="nag">This admin page must be opened inside a D365 model-driven app (Xrm is not available). Open it from the Customer Service workspace or Power Apps sitemap.</div>';
+}
+
+const ORG = XRM ? XRM.Utility.getGlobalContext().getClientUrl() : window.location.origin;
+const BASE = ORG.replace(/\/+$/,"") + "/api/data/v9.2";
+document.getElementById("envText").textContent = ORG;
+
+const $ = id => document.getElementById(id);
+
+/* fetch helper using same-origin cookies (works in agent context too) */
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({
+    Accept: "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+    "Content-Type": "application/json"
+  }, opts.headers || {});
+  const r = await fetch(BASE + path, {
+    method: opts.method || "GET",
+    credentials: "include",
+    headers,
+    body: opts.body || undefined
+  });
+  if (!r.ok){
+    const t = await r.text().catch(()=>"");
+    throw new Error("HTTP " + r.status + " " + path + " " + t.slice(0,200));
+  }
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+/* ============================================================================
+   Env var read / write
+   ============================================================================ */
+async function getEnvVar(schemaName){
+  const j = await api("/environmentvariabledefinitions"
+    + "?$select=environmentvariabledefinitionid,defaultvalue,type"
+    + "&$filter=schemaname eq '" + schemaName + "'"
+    + "&$expand=environmentvariabledefinition_environmentvariablevalue($select=environmentvariablevalueid,value)");
+  if (!j.value.length) return { exists:false };
+  const d = j.value[0];
+  const v = d.environmentvariabledefinition_environmentvariablevalue;
+  return {
+    exists:true,
+    defId: d.environmentvariabledefinitionid,
+    defaultValue: d.defaultvalue,
+    valueId: (v && v.length) ? v[0].environmentvariablevalueid : null,
+    value: (v && v.length) ? v[0].value : d.defaultvalue
+  };
+}
+async function setEnvVar(schemaName, value){
+  const def = await getEnvVar(schemaName);
+  if (!def.exists) throw new Error("env var '" + schemaName + "' does not exist - run the bootstrap script first");
+  if (def.valueId){
+    await api("/environmentvariablevalues(" + def.valueId + ")", {
+      method: "PATCH", body: JSON.stringify({ value: String(value) })
+    });
+  } else {
+    await api("/environmentvariablevalues", {
+      method: "POST", body: JSON.stringify({
+        "EnvironmentVariableDefinitionId@odata.bind": "/environmentvariabledefinitions(" + def.defId + ")",
+        value: String(value),
+        schemaname: schemaName + "_value"
+      })
+    });
+  }
+}
+
+function setStatus(elId, msg, kind){
+  const el = $(elId); el.textContent = msg || "";
+  el.className = "status" + (kind ? " " + kind : "");
+  if (msg && !kind) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 2400);
+}
+
+/* ============================================================================
+   1. Slot duration
+   ============================================================================ */
+const slotGrid = $("slotGrid");
+function paintSlot(val){
+  for (const lbl of slotGrid.querySelectorAll(".slotchip")){
+    const input = lbl.querySelector("input");
+    if (parseInt(input.value,10) === parseInt(val,10)){
+      lbl.classList.add("is-selected"); input.checked = true;
+    } else { lbl.classList.remove("is-selected"); input.checked = false; }
+  }
+}
+slotGrid.addEventListener("change", async (e) => {
+  if (e.target.name !== "slot") return;
+  const v = parseInt(e.target.value, 10);
+  paintSlot(v);
+  setStatus("slotStatus", "Saving...", "warn");
+  try { await setEnvVar("cbk_SlotMinutes", v); setStatus("slotStatus", "Saved: " + v + " min slots"); }
+  catch(err){ setStatus("slotStatus", err.message, "err"); }
+});
+
+/* ============================================================================
+   2. Workstream picker
+   ============================================================================ */
+const wsSelect = $("wsSelect");
+let workstreams = [];
+async function loadWorkstreams(){
+  const j = await api("/msdyn_proactive_engagement_configs"
+    + "?$select=msdyn_proactive_engagement_configid,msdyn_name,msdyn_description,_msdyn_queue_value"
+    + "&$top=50&$orderby=msdyn_name asc");
+  workstreams = j.value.map(w => ({
+    id: w.msdyn_proactive_engagement_configid,
+    name: w.msdyn_name || "(unnamed)",
+    desc: w.msdyn_description || "",
+    queueId: w._msdyn_queue_value || null
+  }));
+  wsSelect.innerHTML = "";
+  if (!workstreams.length){
+    const o = document.createElement("option"); o.textContent = "No workstreams in this org"; o.disabled = true;
+    wsSelect.appendChild(o); return;
+  }
+  const ph = document.createElement("option"); ph.value=""; ph.textContent = "Pick a workstream..."; ph.disabled = true; ph.selected = true;
+  wsSelect.appendChild(ph);
+  for (const w of workstreams){
+    const o = document.createElement("option"); o.value = w.id; o.textContent = w.name; wsSelect.appendChild(o);
+  }
+}
+wsSelect.addEventListener("change", async () => {
+  const id = wsSelect.value; if (!id) return;
+  setStatus("wsStatus", "Saving...", "warn");
+  try {
+    await setEnvVar("cbk_ProactiveEngagementConfigId", id);
+    const w = workstreams.find(x => x.id === id);
+    $("wsHelp").textContent = w && w.desc ? w.desc : "";
+    setStatus("wsStatus", "Saved");
+    await loadOperatingHoursFor(id);
+    loadDashboard(); /* refresh dashboard against new ws */
+  } catch(err){ setStatus("wsStatus", err.message, "err"); }
+});
+
+/* ============================================================================
+   3. Max calls per slot
+   ============================================================================ */
+const maxCalls = $("maxCalls");
+let maxSaveTimer = null;
+maxCalls.addEventListener("input", () => {
+  clearTimeout(maxSaveTimer);
+  setStatus("maxStatus", "...", "warn");
+  maxSaveTimer = setTimeout(async () => {
+    const n = parseInt(maxCalls.value, 10);
+    if (!isFinite(n) || n < 1){ setStatus("maxStatus", "Must be at least 1", "err"); return; }
+    try { await setEnvVar("cbk_MaxCallsPerSlot", n); setStatus("maxStatus", "Saved: max " + n + " per slot"); }
+    catch(err){ setStatus("maxStatus", err.message, "err"); }
+  }, 500);
+});
+
+/* ============================================================================
+   4. Allow-multiple toggle
+   ============================================================================ */
+const multiToggle = $("multiToggle");
+function paintMulti(on){ multiToggle.classList.toggle("is-on", !!on); multiToggle.dataset.on = on ? "1" : "0"; }
+multiToggle.addEventListener("click", async () => {
+  const next = multiToggle.dataset.on !== "1";
+  paintMulti(next);
+  setStatus("multiStatus", "Saving...", "warn");
+  try {
+    await setEnvVar("cbk_AllowMultipleBookings", next ? "Yes" : "No");
+    setStatus("multiStatus", next ? "Saved: multiple bookings allowed" : "Saved: only one booking per customer");
+  } catch(err){ setStatus("multiStatus", err.message, "err"); paintMulti(!next); }
+});
+
+/* ============================================================================
+   Operating hours panel
+   ============================================================================ */
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DOW_FULL = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+async function loadOperatingHoursFor(configId){
+  const body = $("hoursBody");
+  body.innerHTML = '<span class="spinner"></span>Loading...';
+  try {
+    const cfg = await api("/msdyn_proactive_engagement_configs(" + configId + ")?$select=msdyn_name,_msdyn_queue_value,msdyn_ignore_queue_hours");
+    if (!cfg._msdyn_queue_value){
+      body.innerHTML = '<span class="badge none">No queue linked</span><div style="margin-top:8px;font-size:13px;color:var(--muted)">This workstream has no queue. The customer page will fall back to 24/7 (slots 00:00 - 24:00 every day).</div>';
+      return;
+    }
+    const q = await api("/queues(" + cfg._msdyn_queue_value + ")?$select=name,_msdyn_operatinghourid_value,msdyn_operatinghoursbasedassignment");
+    const ohId = q._msdyn_operatinghourid_value;
+    if (!ohId){
+      body.innerHTML =
+        '<div><span class="badge none">Queue: ' + escHtml(q.name || "(unnamed)") + ' - no operating hours set</span></div>' +
+        '<div style="margin-top:8px;font-size:13px;color:var(--muted)">The customer page will fall back to 24/7 (slots 00:00 - 24:00 every day).</div>';
+      return;
+    }
+    const oh = await api("/msdyn_operatinghours(" + ohId + ")?$select=msdyn_name,msdyn_enablealldays,msdyn_starttimestring,msdyn_endtimestring,msdyn_calendarid,msdyn_timezone,msdyn_totalworkhours");
+    const schedule = await resolveSchedule(oh);
+    body.innerHTML = renderHours(q.name, oh, schedule, cfg.msdyn_ignore_queue_hours);
+  } catch(err){
+    body.innerHTML = '<div class="status err">Failed to load: ' + escHtml(err.message) + '</div>';
+  }
+}
+
+/* Try to read the linked calendar to extract weekly schedule.
+   The msdyn_operatinghour record carries msdyn_calendarid (string GUID).
+   We expand calendarrules to recover per-day start/end. */
+async function resolveSchedule(oh){
+  if (oh.msdyn_enablealldays){
+    return {
+      kind: "alldays",
+      open: oh.msdyn_starttimestring || "00:00",
+      close: oh.msdyn_endtimestring || "24:00"
+    };
+  }
+  if (oh.msdyn_calendarid){
+    try {
+      const cal = await api("/calendars(" + oh.msdyn_calendarid + ")"
+        + "?$select=calendarid,name,calendarrules"
+        + "&$expand=calendar_calendar_rules($select=duration,extentcode,starttime,timezonecode,rank,name,subcode,description,pattern,effectiveintervalstart,effectiveintervalend)");
+      const rules = cal.calendar_calendar_rules || [];
+      return { kind: "calendar", rules };
+    } catch(_e){
+      return { kind: "unknown" };
+    }
+  }
+  return { kind: "single", open: oh.msdyn_starttimestring || "09:00", close: oh.msdyn_endtimestring || "17:00" };
+}
+
+function renderHours(queueName, oh, sched, ignore){
+  let html = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">'
+           + '<span class="badge">Queue: ' + escHtml(queueName || "(unnamed)") + '</span>';
+  if (sched.kind === "alldays") html += '<span class="badge alldays">Open all days &middot; ' + escHtml(sched.open) + ' - ' + escHtml(sched.close) + '</span>';
+  else html += '<span class="badge">' + escHtml(oh.msdyn_name || "Operating hours") + '</span>';
+  if (ignore) html += '<span class="badge none">"Ignore queue hours" is ON</span>';
+  html += '</div>';
+
+  if (sched.kind === "alldays"){
+    html += '<table class="hours-table"><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody>';
+    for (let i=0;i<7;i++){
+      html += '<tr><td>' + DOW_FULL[i] + '</td><td class="open">' + escHtml(sched.open) + ' - ' + escHtml(sched.close) + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+  }
+  if (sched.kind === "calendar"){
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + (sched.rules ? sched.rules.length : 0) + ' calendar rule(s). Customer page will honor them at runtime.</div>';
+    if (sched.rules && sched.rules.length){
+      html += '<table class="hours-table"><thead><tr><th>Rule</th><th>Pattern</th><th>Start</th><th>Duration</th></tr></thead><tbody>';
+      for (const r of sched.rules){
+        html += '<tr><td>' + escHtml(r.name || r.subcode || "rule") + '</td><td><code style="font-size:11px">' + escHtml(r.pattern || "") + '</code></td><td>' + escHtml(r.starttime || "") + '</td><td>' + escHtml(String(r.duration || "")) + ' min</td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+  if (sched.kind === "single"){
+    html += '<table class="hours-table"><thead><tr><th>Day</th><th>Hours</th></tr></thead><tbody>';
+    for (let i=0;i<7;i++) html += '<tr><td>' + DOW_FULL[i] + '</td><td class="open">' + escHtml(sched.open) + ' - ' + escHtml(sched.close) + '</td></tr>';
+    html += '</tbody></table>';
+    return html;
+  }
+  return html + '<div class="status warn">Could not parse calendar structure - customer page will fall back to 24/7.</div>';
+}
+
+function escHtml(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+/* ============================================================================
+   Dashboard
+   ============================================================================ */
+let dashRows = [];
+let dashFilter = "upcoming";
+
+document.querySelector("#filterSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-f]"); if (!b) return;
+  document.querySelectorAll("#filterSeg button").forEach(x => x.classList.remove("is-on"));
+  b.classList.add("is-on"); dashFilter = b.dataset.f; renderDashboard();
+});
+$("search").addEventListener("input", renderDashboard);
+$("refreshBtn").addEventListener("click", loadDashboard);
+
+async function loadDashboard(){
+  const tbody = $("dashBody");
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading deliveries...</td></tr>';
+  try {
+    /* pull recent 500 across all engagement configs */
+    const j = await api("/msdyn_proactive_deliveries"
+      + "?$select=msdyn_proactive_deliveryid,msdyn_to_address,msdyn_from_address,msdyn_contact_id,"
+      + "msdyn_proactive_engagement_config_id,msdyn_window_start_date,msdyn_window_end_date,"
+      + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon,statecode,statuscode"
+      + "&$orderby=msdyn_window_start_date desc&$top=500");
+    dashRows = j.value;
+    /* enrich engagement config name */
+    const cfgIds = Array.from(new Set(dashRows.map(r => r.msdyn_proactive_engagement_config_id).filter(Boolean)));
+    const cfgMap = {};
+    for (const w of workstreams) cfgMap[w.id] = w.name;
+    for (const id of cfgIds){
+      if (cfgMap[id]) continue;
+      try {
+        const c = await api("/msdyn_proactive_engagement_configs(" + id + ")?$select=msdyn_name");
+        cfgMap[id] = c.msdyn_name;
+      } catch(_e){ cfgMap[id] = id.slice(0,8) + "..."; }
+    }
+    dashRows.forEach(r => { r._wsName = cfgMap[r.msdyn_proactive_engagement_config_id] || "-"; });
+    renderKpis();
+    renderDashboard();
+  } catch(err){
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--bad)">Failed to load: ' + escHtml(err.message) + '</td></tr>';
+  }
+}
+
+function classifyRow(r){
+  const s = (r.msdyn_status || "").toLowerCase();
+  const st = (r.msdyn_state || "").toLowerCase();
+  const stcode = r.statecode;
+  if (stcode === 1) return "cancelled";
+  if (s === "complete" || s === "completed") return "complete";
+  if (s === "failed" || s === "cancelled" || s === "canceled" || s === "expired") return "failed";
+  if (s === "waiting" || s === "scheduled" || s === "queued" || s === "inprogress" || s === "in progress" || st === "scheduled") return "waiting";
+  return "other";
+}
+
+function renderKpis(){
+  const now = new Date();
+  const dayAgo = new Date(Date.now() - 24*3600*1000);
+  let up=0, comp=0, wait=0, canc=0;
+  for (const r of dashRows){
+    const start = r.msdyn_window_start_date ? new Date(r.msdyn_window_start_date) : null;
+    const cls = classifyRow(r);
+    if (start && start > now && cls !== "cancelled" && cls !== "complete" && cls !== "failed") up++;
+    if (cls === "complete" && new Date(r.createdon || 0) > dayAgo) comp++;
+    if (cls === "waiting") wait++;
+    if (cls === "cancelled" || cls === "failed") canc++;
+  }
+  $("kpiUpcoming").textContent = up;
+  $("kpiCompleted").textContent = comp;
+  $("kpiWaiting").textContent = wait;
+  $("kpiCancelled").textContent = canc;
+}
+
+function renderDashboard(){
+  const tbody = $("dashBody");
+  const q = ($("search").value || "").toLowerCase().trim();
+  const now = new Date();
+  let rows = dashRows.filter(r => {
+    const start = r.msdyn_window_start_date ? new Date(r.msdyn_window_start_date) : null;
+    if (dashFilter === "upcoming" && (!start || start <= now)) return false;
+    if (dashFilter === "past"     && (!start || start >  now)) return false;
+    if (q){
+      const hay = [r.msdyn_to_address, r.msdyn_from_address, r.msdyn_contact_id,
+                   r.msdyn_status, r.msdyn_state, r.msdyn_result, r._wsName].map(x => String(x||"").toLowerCase()).join("|");
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  rows.sort((a,b) => {
+    const ta = a.msdyn_window_start_date ? new Date(a.msdyn_window_start_date).getTime() : 0;
+    const tb = b.msdyn_window_start_date ? new Date(b.msdyn_window_start_date).getTime() : 0;
+    return dashFilter === "past" ? (tb - ta) : (ta - tb);
+  });
+  $("dashCount").textContent = rows.length + " row" + (rows.length === 1 ? "" : "s");
+  if (!rows.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No deliveries match.</td></tr>';
+    return;
+  }
+  const dateFmt = new Intl.DateTimeFormat(undefined,{year:"numeric",month:"short",day:"numeric"});
+  const timeFmt = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
+  const frag = document.createDocumentFragment();
+  for (const r of rows){
+    const tr = document.createElement("tr");
+    const cls = classifyRow(r);
+    const start = r.msdyn_window_start_date ? new Date(r.msdyn_window_start_date) : null;
+    const end   = r.msdyn_window_end_date   ? new Date(r.msdyn_window_end_date)   : null;
+    const when = start ? (dateFmt.format(start) + ' &middot; ' + timeFmt.format(start) + (end ? ' - ' + timeFmt.format(end) : "")) : "-";
+    const showCancel = cls === "waiting" || (start && start > now && cls !== "cancelled" && cls !== "complete" && cls !== "failed");
+    tr.innerHTML =
+      '<td><span class="stt ' + cls + '">' + escHtml(r.msdyn_status || r.msdyn_state || cls) + '</span></td>' +
+      '<td class="when">' + when + '</td>' +
+      '<td class="cust">' + escHtml(r.msdyn_to_address || "-") + '<small>' + escHtml(r.msdyn_contact_id ? r.msdyn_contact_id.slice(0,8) + "..." : "no contact id") + '</small></td>' +
+      '<td>' + escHtml(r._wsName || "-") + '</td>' +
+      '<td>' + escHtml(r.msdyn_result || "-") + '</td>' +
+      '<td>' + (showCancel ? '<button class="btn ghost cancel-row" data-id="' + r.msdyn_proactive_deliveryid + '">Cancel</button>' : '') + '</td>';
+    frag.appendChild(tr);
+  }
+  tbody.innerHTML = "";
+  tbody.appendChild(frag);
+}
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button.cancel-row"); if (!b) return;
+  const id = b.dataset.id;
+  if (!confirm("Cancel this scheduled callback?")) return;
+  b.disabled = true; b.textContent = "Cancelling...";
+  try {
+    await api("/msdyn_proactive_deliveries(" + id + ")", {
+      method: "PATCH", body: JSON.stringify({ statecode: 1, statuscode: 2 })
+    });
+    /* refresh row */
+    const r = dashRows.find(x => x.msdyn_proactive_deliveryid === id);
+    if (r){ r.statecode = 1; r.msdyn_status = "Cancelled"; }
+    renderKpis(); renderDashboard();
+  } catch(err){
+    alert("Cancel failed: " + err.message);
+    b.disabled = false; b.textContent = "Cancel";
+  }
+});
+
+/* ============================================================================
+   Bootstrap
+   ============================================================================ */
+(async function init(){
+  if (!XRM) return;
+  try {
+    /* slot */
+    const slot = await getEnvVar("cbk_SlotMinutes");
+    const slotVal = parseInt(slot.value, 10) || 30;
+    paintSlot([15,30,45,60].includes(slotVal) ? slotVal : 30);
+  } catch(e){ setStatus("slotStatus", e.message, "err"); }
+
+  try { await loadWorkstreams(); } catch(e){ wsSelect.innerHTML = "<option>Error loading</option>"; setStatus("wsStatus", e.message, "err"); }
+
+  try {
+    const cur = await getEnvVar("cbk_ProactiveEngagementConfigId");
+    if (cur.value){
+      wsSelect.value = cur.value;
+      const w = workstreams.find(x => x.id === cur.value);
+      if (w){ $("wsHelp").textContent = w.desc || ""; await loadOperatingHoursFor(cur.value); }
+    } else {
+      $("hoursBody").innerHTML = '<div style="font-size:13px;color:var(--muted)">Pick a workstream above to see its operating hours.</div>';
+    }
+  } catch(e){ setStatus("wsStatus", e.message, "err"); }
+
+  try {
+    const m = await getEnvVar("cbk_MaxCallsPerSlot");
+    maxCalls.value = parseInt(m.value, 10) || 5;
+  } catch(e){ setStatus("maxStatus", e.message, "err"); }
+
+  try {
+    const a = await getEnvVar("cbk_AllowMultipleBookings");
+    const isOn = !a.value || String(a.value).toLowerCase() !== "no";
+    paintMulti(isOn);
+  } catch(e){ setStatus("multiStatus", e.message, "err"); }
+
+  loadDashboard();
+})();
+</script>
+</body>
+</html>

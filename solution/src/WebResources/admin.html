@@ -123,6 +123,10 @@
   table.dash thead th{position:sticky;top:0;background:#f5f7fb;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px;text-align:left;border-bottom:1px solid var(--line-2);z-index:2}
   table.dash td{padding:10px;border-bottom:1px solid var(--line-2);vertical-align:top}
   table.dash tr:hover td{background:#fafbff}
+  table.dash tr.clickable{cursor:pointer}
+  table.dash tr.clickable:hover td{background:#eef2ff}
+  .open-ind{color:var(--accent);font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  select.status-filter{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;color:var(--ink);font-weight:600;cursor:pointer}
   .stt{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em}
   .stt.waiting{background:#fff4d6;color:#7a5a00}
   .stt.complete{background:#d6f5e6;color:var(--good)}
@@ -242,6 +246,14 @@
         <button data-f="all">All</button>
       </div>
       <input class="search" id="search" placeholder="Search phone, contact id, status..." />
+      <select class="status-filter" id="statusFilter" title="Filter by status">
+        <option value="">All statuses</option>
+        <option value="waiting">Waiting / scheduled</option>
+        <option value="complete">Complete</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="failed">Failed / expired</option>
+        <option value="other">Other</option>
+      </select>
       <button class="btn ghost" id="refreshBtn">Refresh</button>
       <span class="dash-count" id="dashCount"></span>
     </div>
@@ -552,6 +564,7 @@ document.querySelector("#filterSeg").addEventListener("click", e => {
   b.classList.add("is-on"); dashFilter = b.dataset.f; renderDashboard();
 });
 $("search").addEventListener("input", renderDashboard);
+$("statusFilter").addEventListener("change", renderDashboard);
 $("refreshBtn").addEventListener("click", loadDashboard);
 
 async function loadDashboard(){
@@ -562,7 +575,7 @@ async function loadDashboard(){
     const j = await api("/msdyn_proactive_deliveries"
       + "?$select=msdyn_proactive_deliveryid,msdyn_to_address,msdyn_from_address,msdyn_contact_id,"
       + "msdyn_proactive_engagement_config_id,msdyn_window_start_date,msdyn_window_end_date,"
-      + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon"
+      + "msdyn_status,msdyn_state,msdyn_result,msdyn_channel,createdon,msdyn_conversation_id"
       + "&$orderby=msdyn_window_start_date desc&$top=500");
     dashRows = j.value;
     /* enrich engagement config name */
@@ -617,11 +630,13 @@ function renderKpis(){
 function renderDashboard(){
   const tbody = $("dashBody");
   const q = ($("search").value || "").toLowerCase().trim();
+  const sFilter = ($("statusFilter").value || "");
   const now = new Date();
   let rows = dashRows.filter(r => {
     const start = r.msdyn_window_start_date ? new Date(r.msdyn_window_start_date) : null;
     if (dashFilter === "upcoming" && (!start || start <= now)) return false;
     if (dashFilter === "past"     && (!start || start >  now)) return false;
+    if (sFilter && classifyRow(r) !== sFilter) return false;
     if (q){
       const hay = [r.msdyn_to_address, r.msdyn_from_address, r.msdyn_contact_id,
                    r.msdyn_status, r.msdyn_state, r.msdyn_result, r._wsName].map(x => String(x||"").toLowerCase()).join("|");
@@ -649,9 +664,11 @@ function renderDashboard(){
     const end   = r.msdyn_window_end_date   ? new Date(r.msdyn_window_end_date)   : null;
     const when = start ? (dateFmt.format(start) + ' &middot; ' + timeFmt.format(start) + (end ? ' - ' + timeFmt.format(end) : "")) : "-";
     const showCancel = cls === "waiting" || (start && start > now && cls !== "cancelled" && cls !== "complete" && cls !== "failed");
+    const convId = r.msdyn_conversation_id || "";
+    if (convId){ tr.classList.add("clickable"); tr.dataset.convId = convId; tr.title = "Open conversation " + convId.slice(0,8) + "..."; }
     tr.innerHTML =
       '<td><span class="stt ' + cls + '">' + escHtml(r.msdyn_status || r.msdyn_state || cls) + '</span></td>' +
-      '<td class="when">' + when + '</td>' +
+      '<td class="when">' + when + (convId ? ' <span class="open-ind">&#x2197;</span>' : '') + '</td>' +
       '<td class="cust">' + escHtml(r.msdyn_to_address || "-") + '<small>' + escHtml(r.msdyn_contact_id ? r.msdyn_contact_id.slice(0,8) + "..." : "no contact id") + '</small></td>' +
       '<td>' + escHtml(r._wsName || "-") + '</td>' +
       '<td>' + escHtml(r.msdyn_result || "-") + '</td>' +
@@ -661,6 +678,21 @@ function renderDashboard(){
   tbody.innerHTML = "";
   tbody.appendChild(frag);
 }
+
+document.addEventListener("click", (e) => {
+  /* open conversation when clicking row (but not the cancel button) */
+  if (e.target.closest("button")) return;
+  const tr = e.target.closest("tr.clickable"); if (!tr) return;
+  const convId = tr.dataset.convId; if (!convId) return;
+  const url = location.origin + "/main.aspx?pagetype=entityrecord&etn=msdyn_ocliveworkitem&id=" + convId;
+  try {
+    if (window.parent && window.parent.Xrm && window.parent.Xrm.Navigation && window.parent.Xrm.Navigation.openForm){
+      window.parent.Xrm.Navigation.openForm({ entityName: "msdyn_ocliveworkitem", entityId: convId, openInNewWindow: true });
+      return;
+    }
+  } catch(_e){}
+  window.open(url, "_blank", "noopener");
+});
 
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button.cancel-row"); if (!b) return;

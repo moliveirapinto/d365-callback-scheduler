@@ -235,8 +235,18 @@
 
   <!-- ============== Dashboard ============== -->
   <section class="card" style="margin-top:22px">
-    <h2>Callback dashboard</h2>
-    <div class="sub">Every <code>msdyn_proactive_delivery</code> in this environment. Filter by upcoming / past / all and search by phone, contact id, or status.</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Callback dashboard</h2>
+      <button class="btn" id="refreshBtnTop" title="Reload deliveries from Dataverse" style="display:inline-flex;align-items:center;gap:6px">
+        <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .6s"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
+        Refresh
+      </button>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2,#5b6075);cursor:pointer">
+        <input type="checkbox" id="autoRefreshChk" checked /> Auto-refresh every 20s
+      </label>
+      <span id="lastRefreshLbl" style="font-size:12px;color:var(--ink-2,#5b6075)"></span>
+    </div>
+    <div class="sub" style="margin-top:6px">Every <code>msdyn_proactive_delivery</code> in this environment. Filter by upcoming / past / all and search by phone, contact id, or status. <i style="color:var(--ink-2,#5b6075)">Note: deliveries are created asynchronously by the service and may take 10-30s to appear after a booking is submitted.</i></div>
 
     <div class="dash-stats" id="dashStats">
       <div class="stat"><div class="lbl">Upcoming</div><div class="val" id="kpiUpcoming">-</div></div>
@@ -674,9 +684,25 @@ document.querySelector("#filterSeg").addEventListener("click", e => {
 $("search").addEventListener("input", renderDashboard);
 $("statusFilter").addEventListener("change", renderDashboard);
 $("refreshBtn").addEventListener("click", loadDashboard);
+const _refreshTop = document.getElementById("refreshBtnTop");
+if (_refreshTop) _refreshTop.addEventListener("click", loadDashboard);
+
+let _autoTimer = null;
+function _startAuto(){
+  if (_autoTimer) { clearInterval(_autoTimer); _autoTimer = null; }
+  const chk = document.getElementById("autoRefreshChk");
+  if (chk && chk.checked) _autoTimer = setInterval(function(){
+    if (document.visibilityState === "visible") loadDashboard();
+  }, 20000);
+}
+const _autoChk = document.getElementById("autoRefreshChk");
+if (_autoChk) _autoChk.addEventListener("change", _startAuto);
+_startAuto();
 
 async function loadDashboard(){
   const tbody = $("dashBody");
+  const icon = document.getElementById("refreshIcon");
+  if (icon){ icon.style.transform = "rotate(360deg)"; setTimeout(function(){ icon.style.transition = "none"; icon.style.transform = "rotate(0deg)"; requestAnimationFrame(function(){ icon.style.transition = "transform .6s"; }); }, 600); }
   tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="spinner"></span>Loading deliveries...</td></tr>';
   try {
     /* pull recent 500 across all engagement configs */
@@ -700,6 +726,8 @@ async function loadDashboard(){
     dashRows.forEach(r => { r._wsName = cfgMap[r.msdyn_proactive_engagement_config_id] || "-"; });
     renderKpis();
     renderDashboard();
+    const lbl = document.getElementById("lastRefreshLbl");
+    if (lbl) lbl.textContent = "Last refresh: " + new Date().toLocaleTimeString() + " (" + dashRows.length + " rows)";
   } catch(err){
     tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:var(--bad)">Failed to load: ' + escHtml(err.message) + '</td></tr>';
   }

@@ -673,16 +673,22 @@ form.addEventListener("submit", async (e) => {
   submitting = true;
   submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Scheduling…";
   try {
+    /* Duplicate-booking guard runs in BOTH modes -- helpers use cookie-auth
+       same-origin REST so they work for AGENT and CUSTOMER alike. */
+    if (CONFIG.allowMultipleBookings === false && CONFIG.proactiveEngagementConfigId) {
+      const existing = await findCustomerActiveDelivery(phoneE164);
+      if (existing) {
+        const act = await showExistingBookingModal(existing);
+        if (act !== "cancel") {
+          fail("Existing callback kept. Nothing changed.");
+          submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback";
+          submitting = false; return;
+        }
+        try { await cancelDelivery(existing.id); } catch(e){ console.warn("[cbk] cancel of existing delivery failed", e); }
+      }
+    }
     if (MODE === "AGENT") {
       if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
-      if (CONFIG.allowMultipleBookings === false) {
-        const existing = await findCustomerActiveDelivery(phoneE164);
-        if (existing) {
-          const act = await showExistingBookingModal(existing);
-          if (act !== "cancel") { fail("Existing callback kept. Nothing changed."); submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback"; submitting = false; return; }
-          await cancelDelivery(existing.id);
-        }
-      }
       const contactId = await resolveContactXrm(payload);
       const r = await callActionXrm(payload, contactId);
       if (!r || !r.DeliveryId) throw new Error("Action did not return a DeliveryId.");

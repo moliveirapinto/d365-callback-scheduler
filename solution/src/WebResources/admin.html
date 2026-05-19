@@ -242,7 +242,7 @@
         Refresh
       </button>
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2,#5b6075);cursor:pointer">
-        <input type="checkbox" id="autoRefreshChk" checked /> Auto-refresh every 20s
+        <input type="checkbox" id="autoRefreshChk" checked /> Auto-refresh every 10s
       </label>
       <span id="lastRefreshLbl" style="font-size:12px;color:var(--ink-2,#5b6075)"></span>
     </div>
@@ -725,6 +725,29 @@ async function loadDashboard(){
       } catch(_e){ cfgMap[id] = id.slice(0,8) + "..."; }
     }
     dashRows.forEach(r => { r._wsName = cfgMap[r.msdyn_proactive_engagement_config_id] || "-"; });
+    /* enrich contact name/phone/email -- msdyn_contact_id is a string GUID, not a
+       lookup, so $expand doesn't work. Batch-fetch contacts in chunks of ~40 ids. */
+    const contactIds = Array.from(new Set(dashRows.map(r => r.msdyn_contact_id).filter(Boolean)));
+    const contactMap = {};
+    const chunkSize = 40;
+    for (let i = 0; i < contactIds.length; i += chunkSize){
+      const chunk = contactIds.slice(i, i + chunkSize);
+      const filter = chunk.map(id => "contactid eq " + id).join(" or ");
+      try {
+        const cj = await api("/contacts?$select=contactid,fullname,firstname,lastname,mobilephone,telephone1,emailaddress1&$filter=" + encodeURIComponent(filter));
+        for (const c of (cj.value || [])) contactMap[c.contactid] = c;
+      } catch(_e){ console.warn("[admin] contact enrich chunk failed", _e); }
+    }
+    dashRows.forEach(r => {
+      const c = r.msdyn_contact_id ? contactMap[r.msdyn_contact_id] : null;
+      if (c){
+        r._contactName = c.fullname || ((c.firstname||"") + " " + (c.lastname||"")).trim() || "";
+        r._contactPhone = c.mobilephone || c.telephone1 || "";
+        r._contactEmail = c.emailaddress1 || "";
+      } else {
+        r._contactName = ""; r._contactPhone = ""; r._contactEmail = "";
+      }
+    });
     renderKpis();
     renderDashboard();
     const lbl = document.getElementById("lastRefreshLbl");
@@ -776,6 +799,7 @@ function renderDashboard(){
     if (sFilter && classifyRow(r) !== sFilter) return false;
     if (q){
       const hay = [r.msdyn_to_address, r.msdyn_from_address, r.msdyn_contact_id,
+                   r._contactName, r._contactPhone, r._contactEmail,
                    r.msdyn_status, r.msdyn_state, r.msdyn_result, r._wsName].map(x => String(x||"").toLowerCase()).join("|");
       if (!hay.includes(q)) return false;
     }
@@ -806,7 +830,7 @@ function renderDashboard(){
     tr.innerHTML =
       '<td><span class="stt ' + cls + '">' + escHtml(r.msdyn_status || r.msdyn_state || cls) + '</span></td>' +
       '<td class="when">' + when + (convId ? ' <span class="open-ind">&#x2197;</span>' : '') + '</td>' +
-      '<td class="cust">' + escHtml(r.msdyn_to_address || "-") + '<small>' + escHtml(r.msdyn_contact_id ? r.msdyn_contact_id.slice(0,8) + "..." : "no contact id") + '</small></td>' +
+      '<td class="cust">' + escHtml(r._contactName || r.msdyn_to_address || r._contactPhone || "-") + '<small>' + escHtml(r._contactPhone || r.msdyn_to_address || (r.msdyn_contact_id ? r.msdyn_contact_id.slice(0,8) + "..." : "no contact id")) + '</small></td>' +
       '<td>' + escHtml(r._wsName || "-") + '</td>' +
       '<td>' + escHtml(r.msdyn_result || "-") + '</td>' +
       '<td>' + (showCancel ? '<button class="btn ghost cancel-row" data-id="' + r.msdyn_proactive_deliveryid + '">Cancel</button>' : '') + '</td>';

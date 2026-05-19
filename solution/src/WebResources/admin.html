@@ -523,12 +523,13 @@ async function resolveSchedule(oh){
   if (oh.msdyn_calendarid){
     try {
       const cal = await api("/calendars(" + oh.msdyn_calendarid + ")"
-        + "?$select=calendarid,name,calendarrules"
+        + "?$select=calendarid,name"
         + "&$expand=calendar_calendar_rules($select=duration,extentcode,starttime,timezonecode,rank,name,subcode,description,pattern,effectiveintervalstart,effectiveintervalend)");
       const rules = cal.calendar_calendar_rules || [];
       return { kind: "calendar", rules };
-    } catch(_e){
-      return { kind: "unknown" };
+    } catch(e){
+      console.warn("[cbk] calendar expand failed", e);
+      return { kind: "unknown", error: e && e.message };
     }
   }
   return { kind: "single", open: oh.msdyn_starttimestring || "09:00", close: oh.msdyn_endtimestring || "17:00" };
@@ -567,7 +568,7 @@ function renderHours(queueName, oh, sched, ignore){
     html += '</tbody></table>';
     return html;
   }
-  return html + '<div class="status warn">Could not parse calendar structure - customer page will fall back to 24/7.</div>';
+  return html + '<div class="status warn">Could not parse calendar structure - customer page will fall back to 24/7.' + (sched.error ? ' <code style="font-size:11px">(' + escHtml(sched.error) + ')</code>' : '') + '</div>';
 }
 
 function escHtml(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }

@@ -149,7 +149,7 @@ Before installing, confirm you have:
 
 The admin page needs to live inside an app to work — it relies on the Dynamics host for sign-in, permissions, and the live connection to your data. The cleanest place to put it is as a menu item in the **Customer Service Admin Center**, right where every other contact-center setting lives.
 
-1. Got to [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service admin center** &rarr; **Edit &rarr; Edit in preview**)
+1. Got to [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service Admin Center** &rarr; **Edit &rarr; Edit.
 2. In the sitemap editor, pick the area where you want the menu item to appear (a good spot is **Customer support** &rarr; **Workstreams**, so it sits next to the other callback s2ettings)
 3. Click **+ New** &rarr; **Subarea**
 4. Fill in the panel on the right:

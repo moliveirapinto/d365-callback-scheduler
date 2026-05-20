@@ -5,7 +5,7 @@
 .DESCRIPTION
   - Creates publisher (cbk) and solution (CallbackScheduler) if they don't exist
   - Creates 6 cbk_ environment variable definitions with sensible defaults
-  - Uploads cbk_callback1..5.html (5 UI variants) and cbk_callback/setup.html as web resources
+  - Uploads cbk_callback1..6.html (6 UI variants) and cbk_callback/setup.html as web resources
   - Adds all components to the solution
   - Publishes customizations
   - (Optional) Exports the solution as a managed .zip for distribution
@@ -57,6 +57,7 @@ $WebResources = @(
   @{ name="cbk_callback3.html";      file="src/WebResources/callback3.html"; display="Callback Scheduler 3";       type=1 },
   @{ name="cbk_callback4.html";      file="src/WebResources/callback4.html"; display="Callback Scheduler 4";       type=1 },
   @{ name="cbk_callback5.html";      file="src/WebResources/callback5.html"; display="Callback Scheduler 5";       type=1 },
+  @{ name="cbk_callback6.html";      file="src/WebResources/callback6.html"; display="Callback Scheduler 6";       type=1 },
   @{ name="cbk_callback/setup.html"; file="src/WebResources/setup.html";     display="Callback Scheduler - Setup"; type=1 }
 )
 

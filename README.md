@@ -149,16 +149,15 @@ Before installing, confirm you have:
 
 The admin page needs to live inside an app to work — it relies on the Dynamics host for sign-in, permissions, and the live connection to your data. The cleanest place to put it is as a menu item in the **Customer Service Admin Center**, right where every other contact-center setting lives.
 
-1. Open the **Customer Service Admin Center** app from your Dynamics 365 home screen
-2. In the top-right, click the **gear icon** &rarr; **Advanced settings** &rarr; **App settings** (or, alternatively, open the app in edit mode from [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service admin center** &rarr; **Edit &rarr; Edit in preview**)
-3. In the sitemap editor, pick the area where you want the menu item to appear (a good spot is **Customer support** &rarr; **Workstreams**, so it sits next to the other callback settings)
-4. Click **+ New** &rarr; **Subarea**
-5. Fill in the panel on the right:
+1. Got to [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service admin center** &rarr; **Edit &rarr; Edit in preview**)
+2. In the sitemap editor, pick the area where you want the menu item to appear (a good spot is **Customer support** &rarr; **Workstreams**, so it sits next to the other callback s2ettings)
+3. Click **+ New** &rarr; **Subarea**
+4. Fill in the panel on the right:
    - **Type**: *Web resource*
    - **URL**: `cbk_callback/setup.html`
    - **Title**: *Callback Scheduler*
    - **Icon**: pick any icon you like (a phone or calendar works well)
-6. Click **Save** &rarr; **Publish**
+5. Click **Save** &rarr; **Publish**
 
 From now on, anyone with admin or supervisor permissions can open the Customer Service Admin Center and click **Callback Scheduler** in the sidebar to manage settings and watch the live dashboard. No URLs to remember, no bookmarks to share.
 

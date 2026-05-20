@@ -15,7 +15,7 @@ Six ready-made page layouts ship with the solution. They all do the same thing �
   <tr>
     <td align="center" width="33%"><b>Layout 4 — Minimal</b><br/><img src="img/04.png" alt="Layout 4" width="100%"/></td>
     <td align="center" width="33%"><b>Layout 5 — Bold</b><br/><img src="img/05.png" alt="Layout 5" width="100%"/></td>
-    <td align="center" width="33%"><b>Layout 6 — Editorial</b><br/><img src="img/06.png" alt="Layout 6" width="100%"/></td>
+    <td align="center" width="33%"><b>Layout 6 — Editorial</b><br/><img src="img/06.jpeg" alt="Layout 6" width="100%"/></td>
   </tr>
 </table>
 

@@ -1,0 +1,21 @@
+# Never commit real env files — they contain the Dataverse client secret
+.env
+**/.env
+.env.local
+**/.env.local
+
+# Node
+node_modules/
+
+# .NET
+bin/
+obj/
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# Editors
+.vscode/
+.idea/

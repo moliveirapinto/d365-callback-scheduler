@@ -1,0 +1,16 @@
+{
+  "name": "callback-bridge",
+  "version": "1.0.0",
+  "description": "Public-website bridge for D365 Callback Scheduler",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  }
+}

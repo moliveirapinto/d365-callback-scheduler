@@ -2,6 +2,8 @@
 
 A customer-facing self-service callback booking page for Microsoft Dynamics 365 Contact Center. Customers pick a date and time window, fill in their details, and the system schedules a proactive outbound call — with real-time estimated waiting times shown live on the page. Agents see the callback topic and notes directly on the Active Conversation form when the call connects.
 
+> **Deploying on a real public website?** Everything in this main repo is the in-Dataverse / model-driven demo. For a real customer-facing rollout on your own public site — your own domain, your own webserver, no Azure subscription and no extra Microsoft licences required — use the dedicated [`FOR REAL IMPLEMENTATIONS/`](./FOR%20REAL%20IMPLEMENTATIONS/) folder. It ships verbatim copies of the six HTML layouts plus a small server-side "bridge" snippet in **Node.js, PHP, Python, and .NET** so you can drop it into whatever stack your website already runs on, along with step-by-step instructions ([`README`](./FOR%20REAL%20IMPLEMENTATIONS/README.md), [`SETUP-DATAVERSE`](./FOR%20REAL%20IMPLEMENTATIONS/SETUP-DATAVERSE.md), [`HOW-IT-WORKS`](./FOR%20REAL%20IMPLEMENTATIONS/HOW-IT-WORKS.md)). The contents of this main repo stay exactly as they are — the real-world implementation lives entirely inside that separate folder to avoid any confusion between the demo and a production deployment.
+
 ## Choose the look that fits your brand
 
 Six ready-made page layouts ship with the solution. They all do the same thing — book a callback — but each has its own personality. Pick the one that best matches your website, switch between them at any time from the admin page.

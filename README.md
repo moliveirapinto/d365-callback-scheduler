@@ -151,7 +151,10 @@ Before installing, confirm you have:
 
 The admin page needs to live inside an app to work — it relies on the Dynamics host for sign-in, permissions, and the live connection to your data. The cleanest place to put it is as a menu item in the **Customer Service Admin Center**, right where every other contact-center setting lives.
 
-1. Got to [make.powerapps.com](https://make.powerapps.com) &rarr; **Apps** &rarr; **Customer Service Admin Center** &rarr; **Edit &rarr; Edit.
+1. Open the Admin Center with the App Designer
+
+![Open Customer Service Admin Center in App Designer](img/admin-app-designer.png)
+
 2. In the sitemap editor, pick the area where you want the menu item to appear
 
 ![Admin sitemap location](img/sadmin.png)

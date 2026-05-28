@@ -58,7 +58,26 @@ $WebResources = @(
   @{ name="cbk_callback4.html";      file="src/WebResources/callback4.html"; display="Callback Scheduler 4";       type=1 },
   @{ name="cbk_callback5.html";      file="src/WebResources/callback5.html"; display="Callback Scheduler 5";       type=1 },
   @{ name="cbk_callback6.html";      file="src/WebResources/callback6.html"; display="Callback Scheduler 6";       type=1 },
-  @{ name="cbk_callback/setup.html"; file="src/WebResources/setup.html";     display="Callback Scheduler - Setup"; type=1 }
+  @{ name="cbk_callback/setup.html"; file="src/WebResources/setup.html";     display="Callback Scheduler - Setup"; type=1 },
+  @{ name="cbk_callback/admin.html"; file="src/WebResources/admin.html";     display="Callback Scheduler - Admin"; type=1 },
+
+  # ---- Portuguese (Brazil) ----
+  @{ name="cbk_ptbr/callback1.html"; file="src/WebResources/ptbr/callback1.html"; display="Callback Scheduler 1 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/callback2.html"; file="src/WebResources/ptbr/callback2.html"; display="Callback Scheduler 2 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/callback3.html"; file="src/WebResources/ptbr/callback3.html"; display="Callback Scheduler 3 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/callback4.html"; file="src/WebResources/ptbr/callback4.html"; display="Callback Scheduler 4 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/callback5.html"; file="src/WebResources/ptbr/callback5.html"; display="Callback Scheduler 5 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/callback6.html"; file="src/WebResources/ptbr/callback6.html"; display="Callback Scheduler 6 (pt-BR)"; type=1 },
+  @{ name="cbk_ptbr/admin.html";     file="src/WebResources/ptbr/admin.html";     display="Callback Scheduler - Admin (pt-BR)"; type=1 },
+
+  # ---- Spanish ----
+  @{ name="cbk_es/callback1.html";   file="src/WebResources/es/callback1.html";   display="Callback Scheduler 1 (es)"; type=1 },
+  @{ name="cbk_es/callback2.html";   file="src/WebResources/es/callback2.html";   display="Callback Scheduler 2 (es)"; type=1 },
+  @{ name="cbk_es/callback3.html";   file="src/WebResources/es/callback3.html";   display="Callback Scheduler 3 (es)"; type=1 },
+  @{ name="cbk_es/callback4.html";   file="src/WebResources/es/callback4.html";   display="Callback Scheduler 4 (es)"; type=1 },
+  @{ name="cbk_es/callback5.html";   file="src/WebResources/es/callback5.html";   display="Callback Scheduler 5 (es)"; type=1 },
+  @{ name="cbk_es/callback6.html";   file="src/WebResources/es/callback6.html";   display="Callback Scheduler 6 (es)"; type=1 },
+  @{ name="cbk_es/admin.html";       file="src/WebResources/es/admin.html";       display="Callback Scheduler - Admin (es)"; type=1 }
 )
 
 # --- auth ------------------------------------------------------------------
@@ -240,5 +259,13 @@ Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 Write-Host "Open the setup page in your environment:" -ForegroundColor Yellow
 Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback/setup.html"
-Write-Host "Open the scheduler page (variant 1; replace 1 with 2-5 for other variants):"
+Write-Host "Open the admin page (new dashboard):"
+Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback/admin.html"
+Write-Host "Open the scheduler page (variant 1; replace 1 with 2-6 for other variants):"
 Write-Host "  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_callback1.html"
+Write-Host ""
+Write-Host "Localized URLs:" -ForegroundColor Yellow
+Write-Host "  pt-BR:  $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_ptbr/callback1.html"
+Write-Host "  pt-BR admin: $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_ptbr/admin.html"
+Write-Host "  es:     $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_es/callback1.html"
+Write-Host "  es admin:    $EnvUrl/main.aspx?pagetype=webresource&webresourceName=cbk_es/admin.html"

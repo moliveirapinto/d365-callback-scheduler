@@ -990,7 +990,7 @@ async function loadTopicOptions(){
     } else {
       loadConfigStandalone();
       await loadConfigFromEnvVarsCookie();
-      footEnv.textContent = CONFIG.flowTriggerUrl ? "Posting to Power Automate flow" : "";
+      footEnv.textContent = "";
     }
   } catch(e){
     console.error("[cbk] init failed", e);

@@ -222,6 +222,8 @@ Example of what agents will see:
 
 ## Topics Options (Manage the values of this field)
 
+![Topic Options](img/topic-options.png)
+
 The "What's it about?" dropdown on the booking page is populated dynamically from the `maulabs_whatsitabout` global Choice (option set). To add, rename, or reorder topics:
 
 1. In [make.powerapps.com](https://make.powerapps.com) > **Solutions**, open **Callback Scheduler for D365 Contact Center**

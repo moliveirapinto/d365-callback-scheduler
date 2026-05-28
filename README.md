@@ -173,6 +173,8 @@ From now on, anyone with admin or supervisor permissions can open the Customer S
 
 ## Creating Workstream Context Variables
 
+![Workstream Context Variables](img/workstream-context-variables.png)
+
 The booking page submits the customer's topic and notes as context attributes inside `CCaaS_CreateProactiveVoiceDelivery`. The included Power Automate flow **"CBK - Populate Conversation columns from context"** reads those attributes and writes them to the Conversation record.
 
 For this mapping to work, the matching context variables must exist in the workstream.

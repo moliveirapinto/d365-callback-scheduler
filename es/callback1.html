@@ -1,347 +1,171 @@
 <!doctype html>
 <!--
   Callback Scheduler — D365 Contact Center
-  ALTERNATE UI #3 — GLASSMORPHISM. Functionally identical to app.html.
-  Generated with the typeui.sh `glassmorphism` design skill.
+  Web resource version. Works in any environment / any tenant with no hardcoded ids.
+
+  Runtime modes:
+    AGENT   - opened inside a D365 model-driven app (uses parent.Xrm.WebApi).
+    CUSTOMER- opened standalone (anonymous). Requires a Power Automate flow URL
+              passed via env var cbk_FlowTriggerUrl OR ?api= URL parameter.
+
+  Todas configuration is loaded from solution Environment Variables at startup:
+    cbk_ProactiveEngagementConfigId  (string, optional - auto-discovered if blank)
+    cbk_HourStart                    (number, default 9)
+    cbk_HourEnd                      (number, default 18)
+    cbk_SlotMinutes                  (number, default 30)
+    cbk_DaysAhead                    (number, default 14)
+    cbk_FlowTriggerUrl               (string, optional - customer-mode endpoint)
 -->
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Schedule a callback</title>
+<title>Programar una devolución de llamada</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Inter:wght@400;500;600;700&display=swap">
 <style>
-  /* ── Glassmorphism tokens (typeui.sh) ──────────────
-     primary #1856FF · success #07CA6B · warning #E89558
-     danger  #EA2143 · text #141414  · surface #FFFFFF
-     ───────────────────────────────────────────────── */
   :root{
-    --primary:#1856FF; --primary-2:#7C3AED; --accent:#06B6D4;
-    --success:#07CA6B; --warning:#E89558; --danger:#EA2143;
-    --ink:#0B1226; --ink-2:#3a3f5c; --muted:#6b7280;
-    --glass:rgba(255,255,255,.55);
-    --glass-2:rgba(255,255,255,.32);
-    --stroke:rgba(255,255,255,.65);
-    --stroke-2:rgba(255,255,255,.35);
-    --blur:18px;
-    --r:18px; --r-sm:12px;
-    --sans:"Plus Jakarta Sans",ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;
-    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-    --shadow: 0 30px 60px -20px rgba(15,23,42,.30), 0 8px 24px -8px rgba(15,23,42,.18);
-    --shadow-sm: 0 12px 24px -10px rgba(15,23,42,.25);
-    --ring: 0 0 0 4px rgba(24,86,255,.18);
+    --bg:#fff5e6; --ink:#0b1020; --ink-2:#1a2040; --muted:#5b6075;
+    --line:rgba(11,16,32,.12); --line-2:rgba(11,16,32,.08);
+    --accent:#ff5e8a; --accent-2:#ff8a5e; --good:#15a371;
+    --shadow-lg:0 20px 50px -20px rgba(11,16,32,.25);
+    --shadow-sm:0 4px 14px -6px rgba(11,16,32,.15);
+    --radius:22px;
+    --serif:"Fraunces",ui-serif,Georgia,serif;
+    --sans:"Inter",ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{
-    font-family:var(--sans);color:var(--ink);min-height:100dvh;
-    background:
-      radial-gradient(60% 50% at 12% 8%, #B8D2FF 0%, transparent 60%),
-      radial-gradient(50% 40% at 90% 12%, #F4C7FF 0%, transparent 60%),
-      radial-gradient(60% 60% at 80% 90%, #BFFAE5 0%, transparent 60%),
-      radial-gradient(70% 60% at 0% 95%, #FFD9B0 0%, transparent 65%),
-      linear-gradient(180deg,#EEF2FF 0%, #F7F8FF 50%, #FFF6EE 100%);
-    background-attachment:fixed;
-    -webkit-font-smoothing:antialiased;
+    font-family:var(--sans);color:var(--ink);
+    background:radial-gradient(1200px 600px at 80% -10%, #ffe6c8 0%, transparent 60%),
+               radial-gradient(800px 400px at -10% 110%, #ffd2cc 0%, transparent 60%),
+               var(--bg);
+    min-height:100dvh;
   }
-  body::before{ /* film grain for depth */
-    content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.35;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .25 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    mix-blend-mode:overlay;
-  }
-  ::selection{background:rgba(24,86,255,.25)}
-
-  .shell{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:24px 20px 120px}
-
-  /* ── Glass primitive ─────────────────────────────── */
-  .glass{
-    background:var(--glass);
-    backdrop-filter:blur(var(--blur)) saturate(180%);
-    -webkit-backdrop-filter:blur(var(--blur)) saturate(180%);
-    border:1px solid var(--stroke);
-    border-radius:var(--r);
-    box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.7);
-  }
-  .glass-2{
-    background:var(--glass-2);
-    backdrop-filter:blur(calc(var(--blur) - 4px)) saturate(170%);
-    -webkit-backdrop-filter:blur(calc(var(--blur) - 4px)) saturate(170%);
-    border:1px solid var(--stroke-2);
-    border-radius:var(--r-sm);
-    box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.55);
-  }
-
-  /* ── Top bar ─────────────────────────────────────── */
-  .top{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 18px;margin-bottom:24px;flex-wrap:wrap}
-  .brand{display:inline-flex;align-items:center;gap:12px;font-weight:700;font-size:17px;letter-spacing:-.01em}
-  .brand .mark{
-    width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:18px;
-    background:linear-gradient(135deg,var(--primary),var(--primary-2));
-    box-shadow:0 8px 24px -10px rgba(24,86,255,.6), inset 0 1px 0 rgba(255,255,255,.4);
-  }
-  .pill{
-    display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;
-    font-size:12.5px;font-weight:600;color:var(--ink);
-  }
-  .pill .live{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px rgba(7,202,107,.18)}
-  .pill .live{animation:pulse 1.6s ease-in-out infinite}
-  @keyframes pulse{50%{opacity:.45;transform:scale(.85)}}
-
-  /* ── Hero ────────────────────────────────────────── */
-  .hero{padding:clamp(28px,4vw,44px);margin-bottom:28px;position:relative;overflow:hidden}
-  .hero::after{
-    content:"";position:absolute;right:-80px;top:-80px;width:280px;height:280px;border-radius:50%;
-    background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), rgba(124,58,237,.35) 70%);
-    filter:blur(2px);
-  }
-  .hero > *{position:relative;z-index:1}
-  .hero .tag{
-    display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
-    background:rgba(255,255,255,.55);border:1px solid var(--stroke-2);
-    font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:14px;
-  }
-  .hero .tag .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
-  .hero h1{
-    font-family:var(--sans);font-weight:800;font-size:clamp(32px,5vw,54px);line-height:1.04;
-    letter-spacing:-.025em;margin:0 0 12px;max-width:18ch;
-    background:linear-gradient(135deg,#0B1226 0%, #1E3A8A 60%, #7C3AED 100%);
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .hero .lede{font-size:clamp(15px,1.4vw,16.5px);max-width:54ch;color:var(--ink-2);line-height:1.55;margin:0}
-  .hero-meta{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
-  .chip{
-    display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;
-    background:rgba(255,255,255,.55);border:1px solid var(--stroke-2);
-    font-size:13px;font-weight:600;color:var(--ink);
-  }
-  .chip svg{width:14px;height:14px;color:var(--primary)}
-
-  /* ── Layout grid ─────────────────────────────────── */
-  .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.95fr);gap:24px;align-items:start}
-  @media (max-width:900px){.grid{grid-template-columns:1fr}}
-
-  /* ── Section card ────────────────────────────────── */
-  .block{padding:clamp(20px,3vw,28px)}
-  .block + .block{margin-top:20px}
-  .step{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
-  .step .num{
-    width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;
-    background:linear-gradient(135deg,var(--primary),var(--accent));
-    box-shadow:0 6px 18px -6px rgba(24,86,255,.55), inset 0 1px 0 rgba(255,255,255,.45);
-    font-family:var(--mono);font-size:15px;
-  }
-  .step h2{margin:0;font-weight:700;font-size:clamp(18px,2vw,22px);letter-spacing:-.015em}
-  .step .hint{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-2);background:rgba(255,255,255,.55);border:1px solid var(--stroke-2);padding:4px 10px;border-radius:999px}
-
-  /* ── Days strip ──────────────────────────────────── */
-  .dates{display:flex;gap:10px;overflow-x:auto;padding:4px 4px 14px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .shell{max-width:1140px;margin:0 auto;padding:28px 22px 80px}
+  .top{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:18px}
+  .brand{display:inline-flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,var(--accent-2),var(--accent));box-shadow:0 6px 18px -6px rgba(255,94,138,.6)}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .pill .live{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px rgba(21,163,113,.18);animation:p 1.6s ease-in-out infinite}
+  @keyframes p{50%{transform:scale(1.2);box-shadow:0 0 0 7px rgba(21,163,113,.05)}}
+  .hero{margin:6px 0 28px}
+  .hero h1{font-family:var(--serif);font-weight:900;font-size:clamp(34px,5.6vw,64px);line-height:1.02;letter-spacing:-.02em;margin:8px 0 12px}
+  .hero h1 em{font-style:italic;font-weight:700;color:var(--accent)}
+  .hero .lede{font-size:clamp(15px,1.7vw,18px);max-width:60ch;color:#3a3f57;line-height:1.55}
+  .hero-meta{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);padding:8px 12px;border-radius:999px;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .chip svg{width:14px;height:14px}
+  .grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.9fr);gap:24px;align-items:start}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border-radius:var(--radius);border:1px solid var(--line-2);box-shadow:var(--shadow-lg);padding:clamp(20px,3vw,36px)}
+  .card+.card{margin-top:24px}
+  .step{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .step .num{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;font-family:var(--serif)}
+  .step h2{margin:0;font-family:var(--serif);font-weight:700;font-size:clamp(20px,2.2vw,26px);letter-spacing:-.01em}
+  .step .hint{margin-left:auto;color:var(--muted);font-size:13px}
+  .dates{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 14px;margin:0 -6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
   .dates::-webkit-scrollbar{height:6px}
-  .dates::-webkit-scrollbar-thumb{background:rgba(11,18,38,.2);border-radius:99px}
-  .day{
-    flex:0 0 auto;min-width:92px;scroll-snap-align:start;padding:14px 10px 12px;text-align:center;
-    cursor:pointer;font:inherit;color:inherit;border-radius:14px;
-    background:rgba(255,255,255,.55);border:1px solid var(--stroke-2);
-    transition:transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease;
-  }
-  .day .dow{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:var(--ink-2)}
-  .day .num{font-family:var(--mono);font-weight:600;font-size:28px;line-height:1;margin-top:6px;color:var(--ink)}
-  .day .mon{font-family:var(--mono);font-size:11px;margin-top:4px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)}
-  .day:hover{transform:translateY(-2px);box-shadow:var(--shadow-sm)}
-  .day.is-today{background:rgba(255,255,255,.85)}
-  .day.is-selected{
-    background:linear-gradient(135deg,var(--primary),var(--primary-2));
-    color:#fff;border-color:transparent;box-shadow:0 14px 30px -12px rgba(24,86,255,.55), inset 0 1px 0 rgba(255,255,255,.35);
-  }
-  .day.is-selected .dow,.day.is-selected .mon,.day.is-selected .num{color:#fff}
-  .day.is-disabled{opacity:.35;pointer-events:none;background:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 6px,rgba(255,255,255,.15) 6px 12px)}
-
-  /* ── Slot grid ───────────────────────────────────── */
-  .slot-section + .slot-section{margin-top:18px}
-  .slot-label{
-    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;
-    margin:0 0 10px;display:inline-block;color:var(--ink-2);background:rgba(255,255,255,.55);
-    border:1px solid var(--stroke-2);padding:4px 10px;border-radius:999px;
-  }
-  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-  .slot{
-    appearance:none;border:1px solid var(--stroke-2);background:rgba(255,255,255,.55);
-    padding:12px 8px;cursor:pointer;font:inherit;font-weight:600;font-size:14px;color:var(--ink);
-    border-radius:12px;
-    transition:transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease, border-color .18s;
-  }
-  .slot small{display:block;font-family:var(--mono);font-weight:400;font-size:11px;margin-top:3px;color:var(--ink-2)}
-  .slot:hover{transform:translateY(-2px);box-shadow:var(--shadow-sm);border-color:rgba(24,86,255,.4)}
-  .slot.is-selected{
-    background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border-color:transparent;
-    box-shadow:0 12px 24px -10px rgba(24,86,255,.5), inset 0 1px 0 rgba(255,255,255,.35);
-  }
+  .dates::-webkit-scrollbar-thumb{background:rgba(11,16,32,.15);border-radius:99px}
+  .day{flex:0 0 auto;min-width:84px;scroll-snap-align:start;padding:14px 10px 12px;border-radius:14px;border:1px solid var(--line);background:#fff;text-align:center;cursor:pointer;transition:transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;user-select:none}
+  .day .dow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .day .num{font-family:var(--serif);font-weight:700;font-size:26px;line-height:1;margin-top:6px}
+  .day .mon{font-size:11px;color:var(--muted);margin-top:4px}
+  .day:hover{transform:translateY(-1px);border-color:rgba(255,94,138,.45)}
+  .day.is-today{border-color:rgba(11,16,32,.35)}
+  .day.is-selected{background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;border-color:transparent;box-shadow:0 10px 24px -10px rgba(11,16,32,.45)}
+  .day.is-selected .dow,.day.is-selected .mon{color:rgba(255,255,255,.7)}
+  .day.is-disabled{opacity:.35;pointer-events:none}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-top:8px}
+  .slot{appearance:none;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 8px;cursor:pointer;font-weight:600;font-size:14px;transition:transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease}
+  .slot small{display:block;color:var(--muted);font-weight:500;font-size:11px;margin-top:2px}
+  .slot:hover{border-color:rgba(255,94,138,.5);transform:translateY(-1px)}
+  .slot.is-selected{background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#fff;border-color:transparent}
   .slot.is-selected small{color:rgba(255,255,255,.85)}
-  .slot[disabled]{opacity:.35;cursor:not-allowed}
-  .slot[disabled]:hover{transform:none;box-shadow:none;border-color:var(--stroke-2)}
-
-  /* ── Form ────────────────────────────────────────── */
-  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .slot[disabled]{opacity:.4;cursor:not-allowed}
+  .slot-section+.slot-section{margin-top:14px}
+  .slot-label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:14px 0 8px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
   @media (max-width:640px){.form{grid-template-columns:1fr}}
   .field{display:flex;flex-direction:column;gap:6px}
   .field.full{grid-column:1/-1}
-  .field label{font-size:12px;font-weight:600;color:var(--ink-2);letter-spacing:.01em}
-  .field input,.field select,.field textarea{
-    width:100%;padding:13px 14px;border-radius:12px;
-    border:1px solid var(--stroke-2);background:rgba(255,255,255,.55);
-    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    font:inherit;color:var(--ink);
-    transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
-  }
-  .field textarea{min-height:104px;resize:vertical;font-family:var(--sans)}
-  .field input::placeholder,.field textarea::placeholder{color:rgba(11,18,38,.4)}
-  .field input:focus,.field select:focus,.field textarea:focus{
-    outline:none;background:rgba(255,255,255,.85);border-color:var(--primary);box-shadow:var(--ring);
-  }
-  .phone-row{display:grid;grid-template-columns:130px 1fr;gap:10px}
-  .consent{
-    display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:14px;
-    background:rgba(255,255,255,.5);border:1px solid var(--stroke-2);
-  }
-  .consent input{margin-top:3px;width:18px;height:18px;accent-color:var(--primary)}
-  .consent p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.5}
-
+  .field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .field input,.field select,.field textarea{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;font:inherit;color:var(--ink);transition:border-color .12s ease, box-shadow .12s ease}
+  .field textarea{min-height:96px;resize:vertical}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(255,94,138,.15)}
+  .phone-row{display:grid;grid-template-columns:120px 1fr;gap:8px}
+  .consent{display:flex;gap:14px;align-items:center;padding:16px 18px;border-radius:12px;background:#fff8f0;border:1px dashed rgba(11,16,32,.18);margin-top:8px;cursor:pointer;width:100%;box-sizing:border-box}
+  .consent input{flex:0 0 auto;margin:0;width:20px;height:20px;accent-color:var(--accent);cursor:pointer}
+  .consent p{flex:1 1 auto;min-width:0;margin:0;font-size:14px;color:#3a3f57;line-height:1.5;font-weight:500;letter-spacing:0;text-transform:none;font-family:var(--sans);text-align:left}
   .submit-row{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-top:22px;flex-wrap:wrap}
-  .btn{
-    appearance:none;cursor:pointer;border:1px solid var(--stroke-2);
-    padding:14px 22px;border-radius:14px;font:inherit;font-weight:700;
-    background:rgba(255,255,255,.6);color:var(--ink);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.55);
-    transition:transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease;
-    display:inline-flex;align-items:center;gap:10px;
-  }
-  .btn:hover{transform:translateY(-2px)}
-  .btn:active{transform:translateY(0)}
-  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
-  .btn.cta{
-    background:linear-gradient(135deg,var(--primary) 0%, var(--primary-2) 100%);
-    color:#fff;border-color:transparent;
-    box-shadow:0 18px 34px -12px rgba(24,86,255,.55), inset 0 1px 0 rgba(255,255,255,.3);
-  }
-  .btn.cta:hover{box-shadow:0 22px 40px -12px rgba(24,86,255,.65), inset 0 1px 0 rgba(255,255,255,.35)}
-  .err{color:var(--danger);font-size:13px;font-weight:600;min-height:18px}
-
-  /* ── Receipt panel ───────────────────────────────── */
-  .receipt-aside{position:sticky;top:24px;align-self:start}
-  .receipt{
-    position:relative;padding:24px;color:#fff;overflow:hidden;border-radius:var(--r);
-    background:
-      radial-gradient(120% 80% at 0% 0%, rgba(124,58,237,.55), transparent 60%),
-      radial-gradient(120% 80% at 100% 100%, rgba(6,182,212,.55), transparent 60%),
-      linear-gradient(135deg, #1E1B4B 0%, #0B1226 100%);
-    border:1px solid rgba(255,255,255,.15);
-    box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.2);
-  }
-  .receipt::before{
-    content:"";position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(circle at 80% -10%, rgba(255,255,255,.18), transparent 40%);
-  }
-  .receipt > *{position:relative;z-index:1}
-  .receipt .stamp{
-    display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
-    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
-    backdrop-filter:blur(10px);
-    font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-    color:rgba(255,255,255,.9);margin-bottom:14px;
-  }
-  .receipt h3{font-weight:700;font-size:22px;line-height:1.1;margin:6px 0 18px;letter-spacing:-.02em}
-  .when{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:14px 0;padding:14px 0;border-top:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12)}
-  .when .col .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:6px}
-  .when .col .v{font-family:var(--mono);font-weight:600;font-size:17px}
-  .receipt dl{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;margin:14px 0 0}
-  .receipt dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:4px}
-  .receipt dd{margin:0;font-weight:600;font-size:14.5px;word-break:break-word}
-  .receipt .empty{color:rgba(255,255,255,.45);font-weight:400;font-style:italic;font-size:13.5px}
-
-  /* ── Success stage ───────────────────────────────── */
-  .success-stage{
-    position:fixed;inset:0;display:grid;place-items:center;padding:24px;z-index:100;
-    background:
-      radial-gradient(60% 50% at 12% 8%, #B8D2FF 0%, transparent 60%),
-      radial-gradient(50% 40% at 90% 12%, #F4C7FF 0%, transparent 60%),
-      radial-gradient(70% 60% at 80% 90%, #BFFAE5 0%, transparent 60%),
-      linear-gradient(180deg,#EEF2FF 0%, #FFF6EE 100%);
-  }
-  .success{
-    text-align:left;padding:34px;max-width:560px;width:100%;box-sizing:border-box;
-    background:rgba(255,255,255,.6);backdrop-filter:blur(28px) saturate(180%);
-    -webkit-backdrop-filter:blur(28px) saturate(180%);
-    border:1px solid rgba(255,255,255,.7);border-radius:24px;
-    box-shadow:0 40px 80px -20px rgba(11,18,38,.35), inset 0 1px 0 rgba(255,255,255,.7);
-    animation:rise .5s cubic-bezier(.2,.9,.3,1.05);
-  }
-  @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
-  .success .badge{
-    display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
-    background:rgba(7,202,107,.16);color:#047a40;
-    font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:14px;
-    border:1px solid rgba(7,202,107,.4);
-  }
-  .success h2{font-weight:800;font-size:32px;line-height:1.05;margin:0 0 8px;letter-spacing:-.02em;
-    background:linear-gradient(135deg,#0B1226, #1E3A8A 60%, #7C3AED);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .success .lede{margin:0 0 22px;font-size:15px;color:var(--ink-2);line-height:1.55}
-  .success .summary{display:grid;grid-template-columns:1fr;gap:10px;margin:0 0 18px}
-  .success .row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;
-    background:rgba(255,255,255,.55);border:1px solid var(--stroke-2)}
-  .success .row .ico{
-    width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;flex-shrink:0;
-    background:linear-gradient(135deg,var(--primary),var(--primary-2));
-    box-shadow:0 8px 20px -8px rgba(24,86,255,.55);
-  }
+  .btn{appearance:none;cursor:pointer;border:0;padding:16px 26px;border-radius:14px;font-weight:700;background:linear-gradient(135deg,var(--ink),var(--ink-2));color:#fff;transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;box-shadow:0 12px 30px -12px rgba(11,16,32,.5);display:inline-flex;align-items:center;gap:10px}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .btn.ghost{background:transparent;color:var(--ink);box-shadow:none;border:1px solid var(--line)}
+  .err{color:#c43054;font-size:13px;font-weight:600;min-height:18px}
+  .pass{position:sticky;top:20px;background:linear-gradient(180deg,#0b1020 0%,#1a2040 100%);color:#fff;border-radius:24px;padding:26px;box-shadow:var(--shadow-lg);overflow:hidden;isolation:isolate}
+  .pass::before{content:"";position:absolute;inset:auto -40px -40px auto;width:220px;height:220px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,94,138,.5),transparent 70%);z-index:-1}
+  .pass::after{content:"";position:absolute;left:-30px;right:-30px;top:60%;border-top:2px dashed rgba(255,255,255,.18)}
+  .pass .label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700}
+  .pass h3{font-family:var(--serif);font-weight:700;font-size:28px;line-height:1.05;margin:6px 0 18px;letter-spacing:-.01em}
+  .pass .when{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-bottom:8px}
+  .pass .when .col .label{margin-bottom:4px}
+  .pass .when .col .v{font-family:var(--serif);font-weight:700;font-size:22px}
+  .pass .when .arrow{width:48px;height:2px;background:rgba(255,255,255,.4);position:relative}
+  .pass .when .arrow::after{content:"";position:absolute;right:-2px;top:-4px;border-left:8px solid rgba(255,255,255,.6);border-top:5px solid transparent;border-bottom:5px solid transparent}
+  .pass dl{display:grid;grid-template-columns:1fr 1fr;gap:18px 14px;margin:24px 0 0}
+  .pass dt{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700;margin-bottom:4px}
+  .pass dd{margin:0;font-weight:600;font-size:15px;word-break:break-word}
+  .pass .empty{color:rgba(255,255,255,.4);font-weight:400;font-style:italic;font-size:14px}
+  .success-stage{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:linear-gradient(180deg,#fff5e6 0%,#ffe9d6 60%,#ffd9c2 100%);overflow:auto;z-index:100}
+  .success{text-align:center;padding:48px 36px 36px;max-width:520px;width:100%;box-sizing:border-box;animation:popIn .45s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes popIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+  .success .check{width:78px;height:78px;border-radius:50%;background:linear-gradient(135deg,var(--good),#0d8a55);display:grid;place-items:center;margin:0 auto 18px;box-shadow:0 18px 40px -16px rgba(13,138,85,.6)}
+  .success h2{font-family:var(--serif);font-weight:700;font-size:36px;margin:0 0 8px;letter-spacing:-.01em}
+  .success .lede{color:var(--muted);margin:0 auto 26px;font-size:15px;max-width:38ch}
+  .success .summary{display:grid;grid-template-columns:1fr;gap:10px;margin:0 auto 22px;max-width:380px;text-align:left}
+  .success .row{display:flex;align-items:center;gap:14px;background:#fff8f0;border:1px solid rgba(11,16,32,.08);border-radius:14px;padding:14px 16px}
+  .success .row .ico{width:38px;height:38px;border-radius:10px;background:#fff;border:1px solid rgba(11,16,32,.08);display:grid;place-items:center;color:var(--accent);flex-shrink:0}
   .success .row .ico svg{width:20px;height:20px}
-  .success .row .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin-bottom:2px}
-  .success .row .val{font-family:var(--mono);font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.25}
-  .success .recap{
-    background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);
-    border-radius:14px;padding:14px 16px;font-size:13.5px;color:var(--ink-2);
-  }
-  .success .recap b{color:var(--ink);text-transform:uppercase;letter-spacing:.04em;font-size:12px}
-
-  /* ── Footer ──────────────────────────────────────── */
-  footer.foot{margin-top:42px;font-family:var(--mono);font-size:12px;display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;color:var(--ink-2)}
-
-  /* ── Mobile sticky CTA ───────────────────────────── */
-  .mobile-cta{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;
-    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
-    background:rgba(255,255,255,.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    border-top:1px solid var(--stroke-2);}
+  .success .row .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:2px}
+  .success .row .val{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);line-height:1.25}
+  .success .recap{margin:18px auto 0;max-width:380px;text-align:left;background:#fff8f0;border:1px dashed rgba(11,16,32,.18);border-radius:14px;padding:14px 16px;font-size:13.5px;color:var(--muted)}
+  .success .recap b{color:var(--ink)}
+  footer.foot{margin-top:40px;color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between}
+  .mobile-cta{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(255,245,230,0) 0%,rgba(255,245,230,.95) 50%);backdrop-filter:blur(8px)}
   .mobile-cta .btn{width:100%;justify-content:center}
-  @media (max-width:900px){.mobile-cta{display:block}.receipt-aside{position:static}}
-
-  /* Workstream picker (glassmorphism) */
-  .ws-pill{position:relative;display:inline-flex;align-items:center;gap:10px;background:var(--glass);backdrop-filter:blur(var(--blur)) saturate(180%);-webkit-backdrop-filter:blur(var(--blur)) saturate(180%);border:1px solid var(--stroke);box-shadow:var(--shadow-sm);padding:7px 14px;border-radius:999px;color:var(--ink);font-family:var(--sans)}
-  .ws-pill .ws-icon{width:14px;height:14px;color:var(--primary);flex-shrink:0}
-  .ws-pill .ws-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+  @media (max-width:860px){.mobile-cta{display:block}.pass{position:static}}
+  .mode-banner{display:inline-flex;gap:6px;align-items:center;background:#fff;border:1px solid var(--line-2);padding:6px 10px;border-radius:999px;font-size:11px;font-weight:600;color:var(--muted)}
+  .mode-banner .mdot{width:6px;height:6px;border-radius:50%;background:var(--good)}
+  .mode-banner.demo .mdot{background:#e8a23e}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  /* Workstream picker */
+  .ws-pill{position:relative;display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line-2);box-shadow:var(--shadow-sm);padding:6px 12px;border-radius:999px;color:var(--ink);font-family:var(--sans)}
+  .ws-pill .ws-icon{width:14px;height:14px;color:var(--accent);flex-shrink:0}
+  .ws-pill .ws-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted)}
   .ws-trigger{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:transparent;border:0;padding:2px 0;outline:none;border-radius:999px}
-  .ws-trigger:focus-visible{outline:2px solid rgba(24,86,255,.5);outline-offset:3px}
+  .ws-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   .ws-trigger .ws-current{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ws-trigger .ws-caret{width:10px;height:6px;color:var(--muted);transition:transform .2s ease;flex-shrink:0}
   .ws-pill[data-open="true"] .ws-caret{transform:rotate(180deg)}
-  .ws-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:280px;max-width:360px;background:rgba(255,255,255,.85);backdrop-filter:blur(var(--blur)) saturate(180%);-webkit-backdrop-filter:blur(var(--blur)) saturate(180%);border:1px solid var(--stroke);box-shadow:var(--shadow);padding:6px;z-index:200;border-radius:var(--r-sm);animation:wsmenu .15s ease-out}
+  .ws-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:280px;max-width:360px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-lg);padding:6px;z-index:200;border-radius:14px;animation:wsmenu .15s ease-out}
   .ws-menu[hidden]{display:none}
-  .ws-menu-head{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted);padding:10px 12px 6px}
+  .ws-menu-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted);padding:10px 12px 6px}
   .ws-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;cursor:pointer;font:inherit;font-size:13.5px;color:var(--ink);text-align:left;transition:background .15s ease;border-radius:10px}
-  .ws-item:hover,.ws-item:focus-visible{background:rgba(24,86,255,.10);outline:none}
-  .ws-item.is-selected{background:rgba(24,86,255,.14)}
+  .ws-item:hover,.ws-item:focus-visible{background:#fff5e6;outline:none}
+  .ws-item.is-selected{background:rgba(255,94,138,.10)}
   .ws-item.is-selected .ws-name{font-weight:700}
   .ws-item .ws-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-  .ws-item .ws-tick{width:16px;height:16px;color:var(--success);opacity:0;flex-shrink:0}
+  .ws-item .ws-tick{width:16px;height:16px;color:var(--accent);opacity:0;flex-shrink:0}
   .ws-item.is-selected .ws-tick{opacity:1}
   .ws-menu-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
-  .ws-status{font-size:12px;font-weight:700;min-width:10px;text-align:center;color:var(--success)}
-  .ws-status.err{color:var(--danger)}
+  .ws-status{font-size:12px;font-weight:700;min-width:10px;text-align:center;color:var(--good)}
+  .ws-status.err{color:#c43054}
   .ws-status.spin{color:var(--muted);animation:wsspin 1s linear infinite;display:inline-block}
   @keyframes wsmenu{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
   @keyframes wsspin{to{transform:rotate(360deg)}}
-
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* cbk modal (duplicate-booking guard) + full-slot marker */
 .cbk-modal-back{position:fixed;inset:0;background:rgba(11,16,32,.55);display:flex;align-items:center;justify-content:center;z-index:9999;animation:cbkfade .15s ease-out}
 .cbk-modal{background:#fff;max-width:480px;width:calc(100% - 32px);padding:28px;border-radius:18px;box-shadow:0 30px 80px -20px rgba(11,16,32,.4);font-family:inherit;color:#0b1020}
@@ -364,42 +188,44 @@
 
 <!-- /cbk-close -->
 <div class="shell">
-  <header class="top glass">
+  <header class="top">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="pill glass-2"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
+      <div class="pill" title="Espera media si llamas ahora mismo"><span class="live"></span>Avg. wait if you call now: <span id="liveWait">…</span></div>
     </div>
   </header>
 
-  <section class="hero glass">
-    <span class="tag"><span class="dot"></span>Skip the hold music · we'll call you</span>
-    <h1>Pick a time. We'll ring you back.</h1>
-    <p class="lede">Tell us when works for you. A specialist will call within your chosen window — no queues, no waiting on hold.</p>
+  <section class="hero">
+    <div class="pill">Olvida la música de espera · te llamamos nosotros</div>
+    <h1>Pick a time. <em>We'll ring you back.</em></h1>
+    <p class="lede">Dinos cuándo te viene bien. Un especialista te llamará dentro de la franja elegida — sin colas, sin esperar al teléfono.</p>
     <div class="hero-meta">
-      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg> Free</span>
-      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg> No account needed</span>
-      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg> Cancel anytime</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg> Gratis</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12l5 5L20 7"/></svg> No account needed</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg> Cancelar anytime</span>
     </div>
   </section>
 
   <div class="grid">
     <div>
       <form id="form" novalidate>
-        <section class="block glass">
-          <div class="step"><div class="num">1</div><h2>Choose a day</h2><span class="hint" id="tzHint"></span></div>
-          <div class="dates" id="dates" role="listbox" aria-label="Available days"></div>
+        <section class="card">
+          <div class="step"><div class="num">1</div><h2>Elige un día</h2><span class="hint" id="tzHint"></span></div>
+          <div class="dates" id="dates" role="listbox" aria-label="Días disponibles"></div>
         </section>
-        <section class="block glass">
-          <div class="step"><div class="num">2</div><h2>Pick a window</h2><span class="hint">Local time</span></div>
+
+        <section class="card">
+          <div class="step"><div class="num">2</div><h2>Elige una franja</h2><span class="hint">Hora local</span></div>
           <div id="slotsHost"></div>
         </section>
-        <section class="block glass">
-          <div class="step"><div class="num">3</div><h2>Your details</h2></div>
+
+        <section class="card">
+          <div class="step"><div class="num">3</div><h2>Tus datos</h2></div>
           <div class="form">
-            <div class="field"><label for="firstName">First name</label><input id="firstName" autocomplete="given-name" required></div>
-            <div class="field"><label for="lastName">Last name</label><input id="lastName" autocomplete="family-name" required></div>
-            <div class="field full"><label for="phone">Mobile number</label>
+            <div class="field"><label for="firstName">Nombre</label><input id="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Apellido</label><input id="lastName" autocomplete="family-name" required></div>
+            <div class="field full"><label for="phone">Número de móvil</label>
               <div class="phone-row">
-                <select id="country" aria-label="Country code">
+                <select id="country" aria-label="Código de país">
                   <option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option>
                   <option value="+351">🇵🇹 +351</option><option value="+34">🇪🇸 +34</option>
                   <option value="+33">🇫🇷 +33</option><option value="+49">🇩🇪 +49</option>
@@ -410,25 +236,25 @@
                 <input id="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="555 0123" required>
               </div>
             </div>
-            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
-            <div class="field"><label for="topic">What's it about?</label>
+            <div class="field"><label for="email">Correo electrónico</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+            <div class="field"><label for="topic">¿De qué se trata?</label>
               <select id="topic">
-                <option value="" disabled selected>Loading topics...</option>
+                <option value="" disabled selected>Cargando temas...</option>
               </select>
             </div>
-            <div class="field full"><label for="notes">Anything we should know? <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-              <textarea id="notes" maxlength="500" placeholder="Order #, account email, or a quick description…"></textarea>
+            <div class="field full"><label for="notes">¿Algo que debamos saber? <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">(opcional)</span></label>
+              <textarea id="notes" maxlength="500" placeholder="Nº de pedido, correo de la cuenta o una descripción breve…"></textarea>
             </div>
             <div class="field full"><label class="consent">
               <input type="checkbox" id="consent" required>
-              <p>I agree to be contacted by phone at the number above for the purpose of this callback.</p>
+              <p>Acepto ser contactado por teléfono en el número indicado para esta devolución de llamada.</p>
             </label></div>
           </div>
           <div class="submit-row">
             <span class="err" id="err" role="alert" aria-live="polite"></span>
             <div style="display:flex;gap:10px">
-              <button type="button" class="btn" id="resetBtn">Reset</button>
-              <button type="submit" class="btn cta" id="submitBtn"><span>Schedule my callback</span>
+              <button type="button" class="btn ghost" id="resetBtn">Restablecer</button>
+              <button type="submit" class="btn" id="submitBtn"><span>Programar mi llamada</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
             </div>
@@ -437,31 +263,32 @@
       </form>
     </div>
 
-    <aside class="receipt-aside">
-      <div class="receipt" id="pass">
-        <div class="stamp">Your callback</div>
-        <h3 id="passTitle">Let's get you sorted</h3>
+    <aside>
+      <div class="pass" id="pass">
+        <div class="label">Tu llamada</div>
+        <h3 id="passTitle">Vamos a resolverlo</h3>
         <div class="when">
-          <div class="col"><div class="lbl">Date</div><div class="v" id="passDate"><span class="empty">— pick a day</span></div></div>
-          <div class="col" style="text-align:right"><div class="lbl">Window</div><div class="v" id="passSlot"><span class="empty">— pick a time</span></div></div>
+          <div class="col"><div class="label">Fecha</div><div class="v" id="passDate"><span class="empty">— elige un día</span></div></div>
+          <div class="arrow" aria-hidden="true"></div>
+          <div class="col" style="text-align:right"><div class="label">Franja</div><div class="v" id="passSlot"><span class="empty">— elige un horario</span></div></div>
         </div>
         <dl>
-          <div><dt>Calling you at</dt><dd id="passPhone"><span class="empty">your number</span></dd></div>
-          <div><dt>About</dt><dd id="passTopic"><span class="empty">your topic</span></dd></div>
-          <div><dt>Confirmation to</dt><dd id="passEmail"><span class="empty">your email</span></dd></div>
-          <div><dt>Time zone</dt><dd id="passTz">—</dd></div>
+          <div><dt>Te llamaremos al</dt><dd id="passPhone"><span class="empty">tu número</span></dd></div>
+          <div><dt>Asunto</dt><dd id="passTopic"><span class="empty">tu tema</span></dd></div>
+          <div><dt>Confirmación a</dt><dd id="passEmail"><span class="empty">tu correo</span></dd></div>
+          <div><dt>Zona horaria</dt><dd id="passTz">—</dd></div>
         </dl>
       </div>
     </aside>
   </div>
 
   <footer class="foot" style="justify-content:center;text-align:center">
-    <div>© <span id="year"></span> · Powered by Dynamics 365 Contact Center</div>
+    <div>© <span id="year"></span> · Funciona con Dynamics 365 Contact Center</div>
     <div id="footEnv"></div>
   </footer>
 </div>
 
-<div class="mobile-cta"><button class="btn cta" id="mobileSubmit" type="button">Schedule my callback</button></div>
+<div class="mobile-cta"><button class="btn" id="mobileSubmit" type="button">Programar mi llamada</button></div>
 
 <script>
 "use strict";
@@ -477,12 +304,19 @@ function getXrm(){
 const XRM = getXrm();
 const MODE = XRM ? "AGENT" : "CUSTOMER";
 
+/* ============================================================================
+   Configuration loader
+   - AGENT mode: reads cbk_* environment variables from Dataverse
+   - CUSTOMER mode: reads URL params + sensible defaults; flow URL required
+   ============================================================================ */
 const DEFAULTS = { hourStart: 9, hourEnd: 18, slotMinutes: 30, daysAhead: 14 };
 let CONFIG = { ...DEFAULTS, proactiveEngagementConfigId: null, flowTriggerUrl: null, orgUrl: null };
 
 async function loadConfigFromXrm(){
   const ctx = XRM.Utility.getGlobalContext();
   CONFIG.orgUrl = ctx.getClientUrl();
+
+  // Pull every cbk_ env var in one call
   const r = await XRM.WebApi.retrieveMultipleRecords(
     "environmentvariabledefinition",
     "?$select=schemaname,defaultvalue,type" +
@@ -494,7 +328,9 @@ async function loadConfigFromXrm(){
     const v = d["environmentvariabledefinition_environmentvariablevalue"];
     map[d.schemaname] = (v && v.length) ? v[0].value : d.defaultvalue;
   }
-  const num = (k, fallback) => { const x = parseInt(map[k], 10); return isFinite(x) ? x : fallback; };
+  const num = (k, fallback) => {
+    const x = parseInt(map[k], 10); return isFinite(x) ? x : fallback;
+  };
   CONFIG.proactiveEngagementConfigId = (map["cbk_ProactiveEngagementConfigId"] || "").trim() || null;
   CONFIG.flowTriggerUrl              = (map["cbk_FlowTriggerUrl"] || "").trim() || null;
   CONFIG.hourStart                   = num("cbk_HourStart",  DEFAULTS.hourStart);
@@ -503,6 +339,8 @@ async function loadConfigFromXrm(){
   CONFIG.daysAhead                   = num("cbk_DaysAhead",  DEFAULTS.daysAhead);
   CONFIG.maxCallsPerSlot             = num("cbk_MaxCallsPerSlot", 5);
   CONFIG.allowMultipleBookings       = String(map["cbk_AllowMultipleBookings"] || "Yes").toLowerCase() !== "no";
+
+  // Auto-discover proactive engagement config if not set
   if (!CONFIG.proactiveEngagementConfigId) {
     try {
       const c = await XRM.WebApi.retrieveMultipleRecords(
@@ -530,7 +368,7 @@ function loadConfigStandalone(){
 }
 
 /* When the standalone page is loaded by an authenticated user (cookie session
-   to the same org - e.g. admin testing, or a customer who happens to be logged
+   to the same org — e.g. admin testing, or a customer who happens to be logged
    in), pull live env-var values so admin changes are reflected without needing
    query-string params. Falls back silently for truly anonymous visitors. */
 async function loadConfigFromEnvVarsCookie(){
@@ -569,6 +407,9 @@ async function loadConfigFromEnvVarsCookie(){
   }
 }
 
+/* ============================================================================
+   Dataverse helpers (AGENT mode only)
+   ============================================================================ */
 async function resolveContactXrm(p){
   const esc = s => String(s).replace(/'/g, "''");
   const clauses = [];
@@ -617,6 +458,10 @@ function buildActionRequest(p, contactId){
       boundParameter: null, operationType: 0,
       operationName: "CCaaS_CreateProactiveVoiceDelivery",
       parameterTypes: {
+        // The CCaaS action validates the body against a strongly-typed C# DTO
+        // that expects these as plain JSON strings -- declaring them as Edm.Guid
+        // here makes Xrm.WebApi serialize them in a shape the server model can't bind
+        // ("could not be converted to ... VoiceDeliveryRequest" at $.ProactiveEngagementConfigId).
         ApiVersion:                  { typeName: "Edm.String", structuralProperty: 1 },
         ProactiveEngagementConfigId: { typeName: "Edm.String", structuralProperty: 1 },
         DestinationPhoneNumber:      { typeName: "Edm.String", structuralProperty: 1 },
@@ -635,11 +480,15 @@ async function callActionXrm(p, contactId){
   return r.json();
 }
 
+/* Background: PATCH msdyn_customer on every matching outbound conversation
+   that the engagement service spins up inside the booked window.            */
 function bindCustomerLater(p, contactId){
   const sinceIso = new Date(Date.now() - 60000).toISOString();
   const phoneTitle = `${p.phoneE164}: Proactive Outbound`;
-  const deadline = Math.min(new Date(p.windowEndIso).getTime() + 120000, Date.now() + 30*60000);
+  const deadline = Math.min(new Date(p.windowEndIso).getTime() + 120000,
+                            Date.now() + 30*60000);
   const seen = Object.create(null);
+
   const tick = async () => {
     if (Date.now() > deadline) return;
     try {
@@ -665,6 +514,9 @@ function bindCustomerLater(p, contactId){
   setTimeout(tick, 4000);
 }
 
+/* ============================================================================
+   Live wait metric (AGENT mode reads it directly; CUSTOMER mode hides it)
+   ============================================================================ */
 async function tickLiveWait(){
   const el = document.getElementById("liveWait");
   if (!el) return;
@@ -676,13 +528,16 @@ async function tickLiveWait(){
             + "&$top=200";
     const r = await XRM.WebApi.retrieveMultipleRecords("msdyn_ocliveworkitem", q);
     const vals = r.entities.map(x => x.msdyn_conversationfirstwaittimeinseconds).filter(v => v != null && v >= 0);
-    if (!vals.length) { el.textContent = "no recent calls"; return; }
+    if (!vals.length) { el.textContent = "sin llamadas recientes"; return; }
     const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
     el.textContent = avg < 60 ? Math.round(avg) + " sec" : (avg/60).toFixed(1) + " min";
     el.title = `D365 live: avg of ${vals.length} call(s) in last 24h`;
   } catch(e){ el.textContent = "—"; }
 }
 
+/* ============================================================================
+   UI — date strip, slots, summary, submit (largely unchanged from dev version)
+   ============================================================================ */
 const $ = id => document.getElementById(id);
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time";
 $("tzHint").textContent = tz; $("passTz").textContent = tz; $("year").textContent = new Date().getFullYear();
@@ -691,7 +546,7 @@ const state = { date: null, slot: null };
 const daysHost = $("dates"), slotsHost = $("slotsHost");
 const dowFmt = new Intl.DateTimeFormat(undefined,{weekday:"short"});
 const monFmt = new Intl.DateTimeFormat(undefined,{month:"short"});
-const timeFmt = new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit"});
+const timeFmt = new Intl.DateTimeFormat(undefined,{hora:"numeric",minute:"2-digit"});
 const dateLongFmt = new Intl.DateTimeFormat(undefined,{weekday:"long",month:"long",day:"numeric"});
 
 const startOfLocalDay = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
@@ -737,13 +592,13 @@ function buildSlots(){
   if (!win) {
     const empty = document.createElement("div");
     empty.className = "slot-section";
-    empty.innerHTML = '<div class="slot-label">Closed</div><p style="color:var(--muted,#5b6075);font-size:14px;margin:8px 0 0">We are closed on this day. Please pick another date.</p>';
+    empty.innerHTML = '<div class="slot-label">Cerrado</div><p style="color:var(--muted,#5b6075);font-size:14px;margin:8px 0 0">Estamos cerrados este día. Elige otra fecha.</p>';
     slotsHost.appendChild(empty); return;
   }
   const noonMin = 12*60;
   const groups = [
-    { label: "Morning",   from: win.openMin,                 to: Math.min(noonMin, win.closeMin) },
-    { label: "Afternoon", from: Math.max(noonMin, win.openMin), to: win.closeMin }
+    { label: "Mañana",   from: win.openMin,                 to: Math.min(noonMin, win.closeMin) },
+    { label: "Tarde", from: Math.max(noonMin, win.openMin), to: win.closeMin }
   ].filter(g => g.from < g.to);
   for (const g of groups){
     const section = document.createElement("div"); section.className = "slot-section";
@@ -756,7 +611,7 @@ function buildSlots(){
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "slot";
       btn.innerHTML = `${timeFmt.format(start)}<small>to ${timeFmt.format(end)}</small>`;
       if (end <= minTime) { btn.disabled = true; }
-      else if (slotIsFull(start)) { btn.disabled = true; btn.classList.add("cbk-slot-full"); btn.title = "Fully booked"; }
+      else if (slotIsFull(start)) { btn.disabled = true; btn.classList.add("cbk-slot-full"); btn.title = "Completo"; }
       else btn.addEventListener("click", () => {
         state.slot = {start,end};
         for (const s of slotsHost.querySelectorAll(".slot")) s.classList.remove("is-selected");
@@ -768,17 +623,20 @@ function buildSlots(){
   }
 }
 function updatePass(){
-  $("passDate").textContent = state.date ? dateLongFmt.format(state.date) : ""; if (!state.date) $("passDate").innerHTML='<span class="empty">— pick a day</span>';
-  $("passSlot").textContent = state.slot ? `${timeFmt.format(state.slot.start)} – ${timeFmt.format(state.slot.end)}` : ""; if (!state.slot) $("passSlot").innerHTML='<span class="empty">— pick a time</span>';
+  $("passDate").textContent = state.date ? dateLongFmt.format(state.date) : ""; if (!state.date) $("passDate").innerHTML='<span class="empty">— elige un día</span>';
+  $("passSlot").textContent = state.slot ? `${timeFmt.format(state.slot.start)} – ${timeFmt.format(state.slot.end)}` : ""; if (!state.slot) $("passSlot").innerHTML='<span class="empty">— elige un horario</span>';
   const ph = ($("country").value + $("phone").value.replace(/\D/g,""));
-  $("passPhone").textContent = ph.length>2 ? ph : ""; if (ph.length<=2) $("passPhone").innerHTML='<span class="empty">your number</span>';
-  { const sel=$("topic"); const lbl=sel.value ? (sel.options[sel.selectedIndex]?.text || "") : ""; $("passTopic").textContent = lbl; if (!sel.value) $("passTopic").innerHTML='<span class="empty">your topic</span>'; }
-  $("passEmail").textContent = $("email").value || ""; if (!$("email").value) $("passEmail").innerHTML='<span class="empty">your email</span>';
+  $("passPhone").textContent = ph.length>2 ? ph : ""; if (ph.length<=2) $("passPhone").innerHTML='<span class="empty">tu número</span>';
+  { const sel=$("topic"); const lbl=sel.value ? (sel.options[sel.selectedIndex]?.text || "") : ""; $("passTopic").textContent = lbl; if (!sel.value) $("passTopic").innerHTML='<span class="empty">tu tema</span>'; }
+  $("passEmail").textContent = $("email").value || ""; if (!$("email").value) $("passEmail").innerHTML='<span class="empty">tu correo</span>';
 }
 ["firstName","lastName","email","topic","country","phone"].forEach(id => {
   $(id).addEventListener("input", updatePass); $(id).addEventListener("change", updatePass);
 });
 
+/* ============================================================================
+   Submit
+   ============================================================================ */
 const form = $("form"), submitBtn = $("submitBtn"), errEl = $("err");
 const fail = m => { errEl.textContent = m; };
 
@@ -792,13 +650,14 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (submitting) return;
   errEl.textContent = "";
-  if (!state.date) return fail("Pick a day above.");
-  if (!state.slot) return fail("Pick a window.");
-  if (!$("firstName").value.trim() || !$("lastName").value.trim()) return fail("Tell us your name.");
+  if (!state.date) return fail("Elige un día arriba.");
+  if (!state.slot) return fail("Elige una franja.");
+  if (!$("firstName").value.trim() || !$("lastName").value.trim()) return fail("Dinos tu nombre.");
   const phoneDigits = $("phone").value.replace(/\D/g,"");
-  if (phoneDigits.length < 6) return fail("Enter a valid phone number.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("email").value)) return fail("Enter a valid email.");
-  if (!$("consent").checked) return fail("Please confirm consent to be called.");
+  if (phoneDigits.length < 6) return fail("Introduce un número de teléfono válido.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($("email").value)) return fail("Introduce un correo válido.");
+  if (!$("topic").value) return fail("Elige un tema.");
+  if (!$("consent").checked) return fail("Confirma el consentimiento para ser llamado.");
 
   const phoneE164 = ($("country").value + phoneDigits).replace(/[^\d+]/g,"");
   const payload = {
@@ -812,9 +671,9 @@ form.addEventListener("submit", async (e) => {
   };
 
   submitting = true;
-  submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Scheduling…";
+  submitBtn.disabled = true; submitBtn.querySelector("span").textContent = "Programando…";
   try {
-    if (!CONFIG.proactiveEngagementConfigId) throw new Error("No Proactive Engagement Config available in this environment.");
+    if (!CONFIG.proactiveEngagementConfigId) throw new Error("No hay configuración de Compromiso Proactivo disponible en este entorno.");
 
     /* Resolve the contact ONCE up-front (same identity, used by both the
        duplicate-booking guard and the action call below). */
@@ -833,8 +692,8 @@ form.addEventListener("submit", async (e) => {
       if (existing) {
         const act = await showExistingBookingModal(existing);
         if (act !== "cancel") {
-          fail("Existing callback kept. Nothing changed.");
-          submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback";
+          fail("Llamada existente conservada. Nada cambió.");
+          submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Programar mi llamada";
           submitting = false; return;
         }
         try { await cancelDelivery(existing.id); } catch(e){ console.warn("[cbk] cancel of existing delivery failed", e); }
@@ -868,12 +727,12 @@ form.addEventListener("submit", async (e) => {
         showSuccess(payload);
         return;
       }
-      throw new Error(restErr ? restErr.message : "No backend configured. Set cbk_FlowTriggerUrl env var (or open this page from inside D365).");
+      throw new Error(restErr ? restErr.message : "Sin backend configurado. Define la variable de entorno cbk_FlowTriggerUrl (o abre esta página desde dentro de D365).");
     }
   } catch(err){
     console.error(err);
-    fail(err.message || "Something went wrong scheduling your callback.");
-    submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Schedule my callback";
+    fail(err.message || "Algo salió mal al programar tu llamada.");
+    submitBtn.disabled = false; submitBtn.querySelector("span").textContent = "Programar mi llamada";
     submitting = false;
   }
 });
@@ -882,12 +741,12 @@ function showSuccess(p){
   const stage = document.createElement("div");
   stage.className = "success-stage";
     const card = document.createElement("section");
-    card.className = "success";
+    card.className = "card success";
     card.style.position = "relative";
     /* dedicated close X anchored to the CARD itself -- always visible alongside
        the popup; survives iframe transforms and weird viewport contexts. */
     const closeX = document.createElement("button");
-    closeX.type = "button"; closeX.setAttribute("aria-label","Close"); closeX.title = "Close";
+    closeX.type = "button"; closeX.setAttribute("aria-label","Cerrar"); closeX.title = "Cerrar";
     closeX.innerHTML = "&times;";
     closeX.style.cssText = "position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(0,0,0,.10);background:#fff;color:#0b1020;font:600 22px/1 system-ui,'Segoe UI',sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.12);z-index:10;display:flex;align-items:center;justify-content:center;padding:0";
     closeX.addEventListener("click", function(){
@@ -898,20 +757,17 @@ function showSuccess(p){
   const dateStr = dateLongFmt.format(state.date);
   const timeStr = `${timeFmt.format(state.slot.start)} \u2013 ${timeFmt.format(state.slot.end)}`;
   card.innerHTML = `
-    <div class="badge">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-      Booked
-    </div>
-    <h2>You're booked.</h2>
-    <p class="lede">A specialist will call you within the window below. No further action needed.</p>
+    <div class="check"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
+    <h2>¡Reservado!</h2>
+    <p class="lede">Un especialista te llamará dentro de la franja indicada abajo. No se requiere ninguna acción más.</p>
     <div class="summary">
-      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><div class="lbl">Calling</div><div class="val">${p.phoneE164}</div></div></div>
-      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="lbl">Date</div><div class="val">${dateStr}</div></div></div>
-      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="lbl">Window</div><div class="val">${timeStr}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><div class="lbl">Llamando</div><div class="val">${p.phoneE164}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="lbl">Fecha</div><div class="val">${dateStr}</div></div></div>
+      <div class="row"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="lbl">Franja</div><div class="val">${timeStr}</div></div></div>
     </div>
     <div class="recap"><b>What happens next:</b><ul style="margin:8px 0 0;padding-left:18px;line-height:1.6">
-      <li>Our system will dial you within your chosen window.</li>
-      <li>If we miss you, we'll try once more.</li>
+      <li>Nuestro sistema te llamará dentro de la franja elegida.</li>
+      <li>Si no logramos hablar contigo, lo intentaremos una vez más.</li>
     </ul></div>`;
   card.appendChild(closeX); /* AFTER innerHTML so it doesn't get wiped out */
   stage.appendChild(card);
@@ -919,59 +775,9 @@ function showSuccess(p){
   document.querySelector(".mobile-cta").style.display = "none";
 }
 
-/* ----------------------------------------------------------------------------
-   Topic options - pulled live from the maulabs_whatsitabout global Choice.
-   ---------------------------------------------------------------------------- */
-async function loadTopicOptions(){
-  const sel = $("topic");
-  const apiBase = (CONFIG.orgUrl || window.location.origin).replace(/\/+$/,"") + "/api/data/v9.2";
-  let opts = [];
-  try {
-    const r = await fetch(apiBase + "/GlobalOptionSetDefinitions(Name='maulabs_whatsitabout')",
-                         { headers: { Accept: "application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" }, credentials: "include" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json();
-    opts = (j.Options || []).map(o => ({
-      value: o.Value,
-      label: o.Label?.UserLocalizedLabel?.Label || o.Label?.LocalizedLabels?.[0]?.Label || ("Option " + o.Value)
-    }));
-  } catch(e){
-    console.error("[cbk] loadTopicOptions failed", e);
-  }
-  sel.innerHTML = "";
-  const ph = document.createElement("option"); ph.value=""; ph.disabled=true; ph.selected=true;
-  ph.textContent = opts.length ? "Choose a topic" : "(could not load topics)";
-  sel.appendChild(ph);
-  for (const o of opts){
-    const op = document.createElement("option");
-    op.value = String(o.value);
-    op.textContent = o.label;
-    sel.appendChild(op);
-  }
-  updatePass();
-}
-(async function init(){
-  const footEnv = $("footEnv");
-  try {
-    if (MODE === "AGENT") {
-      await loadConfigFromXrm();
-      footEnv.textContent = CONFIG.orgUrl ? `Connected to ${CONFIG.orgUrl}` : "";
-    } else {
-      loadConfigStandalone();
-      await loadConfigFromEnvVarsCookie();
-      footEnv.textContent = "";
-    }
-  } catch(e){
-    console.error("[cbk] init failed", e);
-  }
-  await loadTopicOptions();
-  await loadOperatingHours();
-  await loadBookedCounts();
-  buildDays(); updatePass();
-  tickLiveWait(); setInterval(tickLiveWait, 30000);
-  
-  })();
-
+/* ============================================================================
+   Bootstrap
+   ============================================================================ */
 /* ============================================================================
    Enforcement: operating hours, slot capacity, duplicate-booking guard.
    The workstream picker was moved to /WebResources/cbk_admin.html.
@@ -1132,7 +938,7 @@ async function loadBookedCounts(){
   try {
     const cfgId = CONFIG.proactiveEngagementConfigId; if (!cfgId) return;
     const fromIso = new Date(Date.now() - 60000).toISOString();
-    const f = "msdyn_proactive_engagement_config_id eq '" + cfgId + "' and (msdyn_status eq null or msdyn_status ne 'Cancelled') and msdyn_window_start_date ge " + fromIso;
+    const f = "msdyn_proactive_engagement_config_id eq '" + cfgId + "' and (msdyn_status eq null or msdyn_status ne 'Cancelada') and msdyn_window_start_date ge " + fromIso;
     const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_window_start_date&$filter=" + encodeURIComponent(f) + "&$top=500");
     for (const d of (r.value || [])){
       const k = _bucketKey(d.msdyn_window_start_date);
@@ -1154,7 +960,7 @@ async function findCustomerActiveDelivery(contactId, phoneE164ForDisplay){
     const fromIso = new Date(Date.now() - 60000).toISOString();
     /* Filter by contact id (msdyn_to_address is ALWAYS NULL on delivery rows). */
     let f = "msdyn_contact_id eq '" + contactId + "' and msdyn_window_start_date ge " + fromIso
-          + " and (msdyn_status eq null or (msdyn_status ne 'Cancelled' and msdyn_status ne 'Canceled' and msdyn_status ne 'Complete' and msdyn_status ne 'Completed' and msdyn_status ne 'Failed' and msdyn_status ne 'Expired'))";
+          + " and (msdyn_status eq null or (msdyn_status ne 'Cancelada' and msdyn_status ne 'Canceled' and msdyn_status ne 'Completada' and msdyn_status ne 'Completed' and msdyn_status ne 'Failed' and msdyn_status ne 'Expired'))";
     if (cfgId) f += " and msdyn_proactive_engagement_config_id eq '" + cfgId + "'";
     const r = await _apiGet("/msdyn_proactive_deliveries?$select=msdyn_proactive_deliveryid,msdyn_window_start_date,msdyn_window_end_date,msdyn_contact_id,msdyn_to_address,msdyn_status&$filter=" + encodeURIComponent(f) + "&$orderby=msdyn_window_start_date asc&$top=1");
     if (r.value && r.value.length){
@@ -1168,27 +974,27 @@ async function cancelDelivery(id){
   const r = await fetch(_apiBase() + "/msdyn_proactive_deliveries(" + id + ")", {
     method: "PATCH", credentials: "include",
     headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },
-    body: JSON.stringify({ msdyn_status: "Cancelled", msdyn_state: "Cancelled" })
+    body: JSON.stringify({ msdyn_status: "Cancelada", msdyn_state: "Cancelada" })
   });
-  if (!r.ok) throw new Error("Cancel HTTP " + r.status);
+  if (!r.ok) throw new Error("Cancelar HTTP " + r.status);
 }
 function showExistingBookingModal(existing){
   return new Promise(function(resolve){
     const back = document.createElement("div"); back.className = "cbk-modal-back";
     const dateF = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" });
-    const timeF = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+    const timeF = new Intl.DateTimeFormat(undefined, { hora: "numeric", minute: "2-digit" });
     back.innerHTML =
       '<div class="cbk-modal" role="dialog" aria-modal="true">' +
-        '<h3>You already have a callback scheduled</h3>' +
+        '<h3>Ya tienes una llamada programada</h3>' +
         '<p>We found an existing callback booked for <b>' + existing.phone + '</b>:</p>' +
         '<div class="cbk-modal-summary">' +
           '<div><b>' + dateF.format(existing.start) + '</b></div>' +
           '<div>' + timeF.format(existing.start) + ' &ndash; ' + timeF.format(existing.end) + '</div>' +
         '</div>' +
-        '<p>Cancel the existing one and book this new time, or keep the existing callback?</p>' +
+        '<p>¿Cancelar la llamada existente y reservar este nuevo horario, o mantener la existente?</p>' +
         '<div class="cbk-modal-actions">' +
-          '<button type="button" class="cbk-btn cbk-btn-ghost" data-act="keep">Keep existing</button>' +
-          '<button type="button" class="cbk-btn cbk-btn-danger" data-act="cancel">Cancel existing &amp; rebook</button>' +
+          '<button type="button" class="cbk-btn cbk-btn-ghost" data-act="keep">Mantener la existente</button>' +
+          '<button type="button" class="cbk-btn cbk-btn-danger" data-act="cancel">Cancelar la existente y reservar</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(back);
@@ -1201,7 +1007,57 @@ function showExistingBookingModal(existing){
     });
   });
 }
-
+/* ----------------------------------------------------------------------------
+   Topic options - pulled live from the maulabs_whatsitabout global Choice.
+   ---------------------------------------------------------------------------- */
+async function loadTopicOptions(){
+  const sel = $("topic");
+  const apiBase = (CONFIG.orgUrl || window.location.origin).replace(/\/+$/,"") + "/api/data/v9.2";
+  let opts = [];
+  try {
+    const r = await fetch(apiBase + "/GlobalOptionSetDefinitions(Name='maulabs_whatsitabout')",
+                         { headers: { Accept: "application/json", "OData-MaxVersion":"4.0", "OData-Version":"4.0" }, credentials: "include" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    opts = (j.Options || []).map(o => ({
+      value: o.Value,
+      label: o.Label?.UserLocalizedLabel?.Label || o.Label?.LocalizedLabels?.[0]?.Label || ("Option " + o.Value)
+    }));
+  } catch(e){
+    console.error("[cbk] loadTopicOptions failed", e);
+  }
+  sel.innerHTML = "";
+  const ph = document.createElement("option"); ph.value=""; ph.disabled=true; ph.selected=true;
+  ph.textContent = opts.length ? "Elige un tema" : "(could not load topics)";
+  sel.appendChild(ph);
+  for (const o of opts){
+    const op = document.createElement("option");
+    op.value = String(o.value);
+    op.textContent = o.label;
+    sel.appendChild(op);
+  }
+  updatePass();
+}
+(async function init(){
+  const footEnv = $("footEnv");
+  try {
+    if (MODE === "AGENT") {
+      await loadConfigFromXrm();
+      footEnv.textContent = "";
+    } else {
+      loadConfigStandalone();
+      await loadConfigFromEnvVarsCookie();
+      footEnv.textContent = "";
+    }
+  } catch(e){
+    console.error("[cbk] init failed", e);
+  }
+  await loadTopicOptions();
+  await loadOperatingHours();
+  await loadBookedCounts();
+  buildDays(); updatePass();
+  tickLiveWait(); setInterval(tickLiveWait, 30000);
+})();
 </script>
 </body>
 </html>

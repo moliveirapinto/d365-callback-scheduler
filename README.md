@@ -41,7 +41,7 @@ As soon as a customer submits their request, a clean confirmation card appears w
 4. [Installation](#installation)
 5. [Creating Workstream Context Variables](#creating-workstream-context-variables)
 6. [Adding Fields to the Active Conversation Form](#adding-fields-to-the-active-conversation-form)
-7. [Topic Options](#topic-options)
+7. [Topics Options](#topics-options-manage-the-values-of-this-field)
 8. [Smart Visibility - Business Rules](#smart-visibility---business-rules)
 9. [Uninstalling](#uninstalling)
 
@@ -220,7 +220,7 @@ Example of what agents will see:
 
 ---
 
-## Topic Options
+## Topics Options (Manage the values of this field)
 
 The "What's it about?" dropdown on the booking page is populated dynamically from the `maulabs_whatsitabout` global Choice (option set). To add, rename, or reorder topics:
 
